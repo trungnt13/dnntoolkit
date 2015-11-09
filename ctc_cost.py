@@ -12,15 +12,9 @@ ACM, 2006.
 Credits: Shawn Tan, Rakesh Var, Philemon Brakel and Mohammad Pezeshki
 
 This code is distributed without any warranty, express or implied.
-'''
-'''Connectionist Temporal Classification
-y_hat : T x B x C+1
-y : L x B
-y_hat_mask : T x B
-y_mask : L x B
 """
 import theano
-import numpy
+import numpy as np
 from theano import tensor
 from theano import tensor as T
 
@@ -30,7 +24,7 @@ floatX = theano.config.floatX
 # ======================================================================
 # cost objective function
 # ======================================================================
-def ctc_objective(y_pred, y, y_mask=None, y_pred_mask=None):
+def ctc_objective(y_pred, y, y_mask=None, y_pred_mask=None, batch=True):
 	''' CTC objective.
 
 	Parameters
@@ -43,6 +37,9 @@ def ctc_objective(y_pred, y, y_mask=None, y_pred_mask=None):
 		mask decides which labels in y is included (0 for ignore, 1 for keep)
 	y_pred_mask : [nb_samples, in_seq_len]
 		mask decides which samples in input sequence are used
+	batch : True/False
+		if batching is not used, all mask will be ignored
+		Note: the implementation without batch support is more reliable
 
 	Returns
 	-------
@@ -62,29 +59,109 @@ def ctc_objective(y_pred, y, y_mask=None, y_pred_mask=None):
 
 		You will need gradient clipping to prevent exploding gradients as well.
 	'''
-	# ====== reshape input ====== #
-	y_pred_mask = y_pred_mask if y_pred_mask else T.ones((y_pred.shape[0], y_pred.shape[1]), dtype='float32')
-	y_pred = y_pred.dimshuffle(1, 0, 2)
-	y_pred_mask = y_pred_mask.dimshuffle(1, 0)
+	if batch:
+		# ====== reshape input ====== #
+		y_pred_mask = y_pred_mask if y_pred_mask else T.ones((y_pred.shape[0], y_pred.shape[1]), dtype='float32')
+		y_pred = y_pred.dimshuffle(1, 0, 2)
+		y_pred_mask = y_pred_mask.dimshuffle(1, 0)
 
-	y_mask = y_mask if y_mask else T.ones(y.shape, dtype='float32')
-	y = y.dimshuffle(1, 0)
-	y_mask = y_mask.dimshuffle(1, 0)
+		y_mask = y_mask if y_mask else T.ones(y.shape, dtype='float32')
+		y = y.dimshuffle(1, 0)
+		y_mask = y_mask.dimshuffle(1, 0)
 
-	# ====== calculate cost ====== #
-	y_pred_softmax = (T.exp(y_pred - y_pred.max(2)[:,:, None]) /
-	                  T.exp(y_pred - y_pred.max(2)[:,:, None]).sum(2)[:,:, None])
+		# ====== calculate cost ====== #
+		y_pred_softmax = (T.exp(y_pred - y_pred.max(2)[:,:, None]) /
+		                  T.exp(y_pred - y_pred.max(2)[:,:, None]).sum(2)[:,:, None])
+		grad_cost = _pseudo_cost(y, y_pred, y_pred_softmax, y_mask, y_pred_mask)
+		grad_cost = grad_cost.mean()
+		monitor_cost = _cost(y, y_pred_softmax, y_mask, y_pred_mask, True)
+		monitor_cost = monitor_cost.mean()
 
-	grad_cost = _pseudo_cost(y, y_pred, y_pred_softmax, y_mask, y_pred_mask)
-	grad_cost = grad_cost.mean()
-
-	monitor_cost = _cost(y, y_pred_softmax, y_mask, y_pred_mask, True)
-	monitor_cost = monitor_cost.mean()
-
-	return grad_cost, monitor_cost
+		return grad_cost, monitor_cost
+	else:
+		return _cost_no_batch(y_pred, y)
 
 # ======================================================================
-# Original implementation
+# Sequence Implementation (NO batch)
+# Shawn Tan
+# ======================================================================
+def _interleave_blanks(Y):
+    Y_ = T.alloc(-1, Y.shape[0] * 2 + 1)
+    Y_ = T.set_subtensor(Y_[T.arange(Y.shape[0]) * 2 + 1], Y)
+    return Y_
+
+def _create_skip_idxs(Y):
+    skip_idxs = T.arange((Y.shape[0] - 3) // 2) * 2 + 1
+    non_repeats = T.neq(Y[skip_idxs], Y[skip_idxs + 2])
+    return skip_idxs[non_repeats.nonzero()]
+
+def _update_log_p(skip_idxs, zeros, active, log_p_curr, log_p_prev):
+    active_skip_idxs = skip_idxs[(skip_idxs < active).nonzero()]
+    active_next = T.cast(T.minimum(
+        T.maximum(
+            active + 1,
+            T.max(T.concatenate([active_skip_idxs, [-1]])) + 2 + 1
+        ),
+        log_p_curr.shape[0]
+    ), 'int32')
+
+    common_factor = T.max(log_p_prev[:active])
+    p_prev = T.exp(log_p_prev[:active] - common_factor)
+    _p_prev = zeros[:active_next]
+    # copy over
+    _p_prev = T.set_subtensor(_p_prev[:active], p_prev)
+    # previous transitions
+    _p_prev = T.inc_subtensor(_p_prev[1:], _p_prev[:-1])
+    # skip transitions
+    _p_prev = T.inc_subtensor(_p_prev[active_skip_idxs + 2], p_prev[active_skip_idxs])
+    updated_log_p_prev = T.log(_p_prev) + common_factor
+
+    log_p_next = T.set_subtensor(
+        zeros[:active_next],
+        log_p_curr[:active_next] + updated_log_p_prev
+    )
+    return active_next, log_p_next
+
+def _path_probs(predict, Y, alpha=1e-4):
+    smoothed_predict = (1 - alpha) * predict[:, Y] + alpha * np.float32(1.) / Y.shape[0]
+    L = T.log(smoothed_predict)
+    zeros = T.zeros_like(L[0])
+    base = T.set_subtensor(zeros[:1], np.float32(1))
+    log_first = zeros
+
+    f_skip_idxs = _create_skip_idxs(Y)
+    b_skip_idxs = _create_skip_idxs(Y[::-1]) # there should be a shortcut to calculating this
+
+    def step(log_f_curr, log_b_curr, f_active, log_f_prev, b_active, log_b_prev):
+        f_active_next, log_f_next = _update_log_p(f_skip_idxs, zeros, f_active, log_f_curr, log_f_prev)
+        b_active_next, log_b_next = _update_log_p(b_skip_idxs, zeros, b_active, log_b_curr, log_b_prev)
+        return f_active_next, log_f_next, b_active_next, log_b_next
+    [f_active, log_f_probs, b_active, log_b_probs], _ = theano.scan(
+        step,
+        sequences=[
+            L,
+            L[::-1, ::-1]
+        ],
+        outputs_info=[
+            np.int32(1), log_first,
+            np.int32(1), log_first,
+        ]
+    )
+    idxs = T.arange(L.shape[1]).dimshuffle('x', 0)
+    mask = (idxs < f_active.dimshuffle(0, 'x')) & (idxs < b_active.dimshuffle(0, 'x'))[::-1, ::-1]
+    log_probs = log_f_probs + log_b_probs[::-1, ::-1] - L
+    return log_probs, mask
+
+def _cost_no_batch(predict, Y):
+    log_probs, mask = _path_probs(predict, _interleave_blanks(Y))
+    common_factor = T.max(log_probs)
+    total_log_prob = T.log(T.sum(T.exp(log_probs - common_factor)[mask.nonzero()])) + common_factor
+    return -total_log_prob
+
+# ======================================================================
+# Batch support implementation by:
+# Philemon Brakel
+# Mohammad Pezeshki
 # ======================================================================
 
 def _get_targets(y, log_y_hat, y_mask, y_hat_mask):
@@ -108,10 +185,10 @@ def _get_targets(y, log_y_hat, y_mask, y_hat_mask):
                                             y_hat_mask=None)
     marginals = log_alpha + log_beta - y_prob
     max_marg = marginals.max(2)
-    max_marg = T.switch(T.le(max_marg, -numpy.inf), 0, max_marg)
+    max_marg = T.switch(T.le(max_marg, -np.inf), 0, max_marg)
     log_Z = T.log(T.exp(marginals - max_marg[:,:, None]).sum(2))
     log_Z = log_Z + max_marg
-    log_Z = T.switch(T.le(log_Z, -numpy.inf), 0, log_Z)
+    log_Z = T.switch(T.le(log_Z, -np.inf), 0, log_Z)
     targets = _labeling_batch_to_class_batch(blanked_y,
                                              T.exp(marginals -
                                                    log_Z[:,:, None]),
@@ -350,7 +427,7 @@ def _log_dot_matrix(x, z):
     y = x[:,:, None] + z[None,:,:]
     y_max = y.max(axis=1)
     out = T.log(T.sum(T.exp(y - y_max[:, None,:]), axis=1)) + y_max
-    return T.switch(T.isnan(out), -numpy.inf, out)
+    return T.switch(T.isnan(out), -np.inf, out)
 
 
 def _log_dot_tensor(x, z):
@@ -358,7 +435,7 @@ def _log_dot_tensor(x, z):
     max_ = log_dot.max(axis=0)
     out = (T.log(T.sum(T.exp(log_dot - max_[None,:,:]), axis=0)) + max_)
     out = out.T
-    return T.switch(T.isnan(out), -numpy.inf, out)
+    return T.switch(T.isnan(out), -np.inf, out)
 
 
 def _log_path_probabs(y, log_y_hat, y_mask, y_hat_mask, blank_symbol,
