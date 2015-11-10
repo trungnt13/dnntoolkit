@@ -24,7 +24,7 @@ floatX = theano.config.floatX
 # ======================================================================
 # cost objective function
 # ======================================================================
-def ctc_objective(y_pred, y, y_mask=None, y_pred_mask=None, batch=True):
+def ctc_objective(y_pred, y, y_pred_mask=None, y_mask=None, batch=True):
 	''' CTC objective.
 
 	Parameters
@@ -38,7 +38,7 @@ def ctc_objective(y_pred, y, y_mask=None, y_pred_mask=None, batch=True):
 	y_pred_mask : [nb_samples, in_seq_len]
 		mask decides which samples in input sequence are used
 	batch : True/False
-		if batching is not used, all mask will be ignored
+		if batching is not used, nb_samples=1
 		Note: the implementation without batch support is more reliable
 
 	Returns
@@ -50,26 +50,28 @@ def ctc_objective(y_pred, y, y_mask=None, y_pred_mask=None, batch=True):
 	Note
 	----
 	According to @Richard Kurle:
-		 test error of 38% with 1 bidirectional LSTM layer or with a stack of 3,
-		 but I could not reproduce the results to those reported in Grave's paper.
+		test error of 38% with 1 bidirectional LSTM layer or with a stack of 3,
+		but I could not reproduce the results to those reported in Grave's paper.
 
-		 If you get blanks only, you probably have just bad hyperparameters or you
-		 did not wait enough epochs. At the beginnign of the training,
-		 only the cost decreases but you don't see yet any characters popping up.
+		If you get blanks only, you probably have just bad hyperparameters or you
+		did not wait enough epochs. At the beginnign of the training,
+		only the cost decreases but you don't see yet any characters popping up.
 
 		You will need gradient clipping to prevent exploding gradients as well.
 	'''
+	y = T.cast(y, dtype='int32')
+	y_pred_mask = y_pred_mask if y_pred_mask else T.ones((y_pred.shape[0], y_pred.shape[1]), dtype=floatX)
+	y_mask = y_mask if y_mask else T.ones(y.shape, dtype=floatX)
 	if batch:
 		# ====== reshape input ====== #
-		y_pred_mask = y_pred_mask if y_pred_mask else T.ones((y_pred.shape[0], y_pred.shape[1]), dtype='float32')
 		y_pred = y_pred.dimshuffle(1, 0, 2)
 		y_pred_mask = y_pred_mask.dimshuffle(1, 0)
 
-		y_mask = y_mask if y_mask else T.ones(y.shape, dtype='float32')
 		y = y.dimshuffle(1, 0)
 		y_mask = y_mask.dimshuffle(1, 0)
 
 		# ====== calculate cost ====== #
+		# 3D softmax
 		y_pred_softmax = (T.exp(y_pred - y_pred.max(2)[:,:, None]) /
 		                  T.exp(y_pred - y_pred.max(2)[:,:, None]).sum(2)[:,:, None])
 		grad_cost = _pseudo_cost(y, y_pred, y_pred_softmax, y_mask, y_pred_mask)
@@ -79,7 +81,19 @@ def ctc_objective(y_pred, y, y_mask=None, y_pred_mask=None, batch=True):
 
 		return grad_cost, monitor_cost
 	else:
-		return _cost_no_batch(y_pred, y)
+		# batch_size=1 => just take [0] to reduce 1 dimension
+		y_pred = y_pred[0]
+		y_pred_mask = y_pred_mask[0]
+		y = y[0]
+		y_mask = y_mask[0]
+
+		# after take, ndim from 2 to 3, need to be reduced to 2
+		y_pred = T.take(y_pred, T.nonzero(y_pred_mask, return_matrix=True), axis=0)[0]
+		y = T.take(y, T.nonzero(y_mask, return_matrix=True), axis=0).ravel()
+
+		y_pred_softmax = (T.exp(y_pred - y_pred.max(1)[:, None]) /
+		                  T.exp(y_pred - y_pred.max(1)[:, None]).sum(1)[:, None])
+		return _cost_no_batch(y_pred_softmax, y)
 
 # ======================================================================
 # Sequence Implementation (NO batch)
