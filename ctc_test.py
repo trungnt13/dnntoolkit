@@ -10,7 +10,7 @@ import time
 # the output sequence
 # * y_mask: decide what labels in output_sequence are matter for the training process.
 # ======================================================================
-nb_samples = 1000 # n
+nb_samples = 128 # n
 nb_classes = 20	# C
 in_seq_len = 60 # T
 out_seq_len = 20 # L
@@ -67,6 +67,7 @@ def ctc_test():
 	y_pred = lasagne.layers.get_output(l_out, X_)
 	all_params = lasagne.layers.get_all_params(l_out, trainable=True)
 	grad_cost, real_cost = ctc_cost.ctc_objective(y_pred, y_)
+
 	all_grads = T.grad(grad_cost, all_params)
 	updates = lasagne.updates.rmsprop(all_grads, all_params, learning_rate=1e-3)
 

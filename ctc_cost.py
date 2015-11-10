@@ -66,7 +66,6 @@ def ctc_objective(y_pred, y, y_pred_mask=None, y_mask=None, batch=True):
 		# ====== reshape input ====== #
 		y_pred = y_pred.dimshuffle(1, 0, 2)
 		y_pred_mask = y_pred_mask.dimshuffle(1, 0)
-
 		y = y.dimshuffle(1, 0)
 		y_mask = y_mask.dimshuffle(1, 0)
 
@@ -84,7 +83,7 @@ def ctc_objective(y_pred, y, y_pred_mask=None, y_mask=None, batch=True):
 		y = y[0]
 		y_mask = y_mask[0]
 
-		# after take, ndim from 2 to 3, need to be reduced to 2
+		# after take, ndim=2 go up to 3, need to be reduced back to 2
 		y_pred = T.take(y_pred, T.nonzero(y_pred_mask, return_matrix=True), axis=0)[0]
 		y = T.take(y, T.nonzero(y_mask, return_matrix=True), axis=0).ravel()
 
