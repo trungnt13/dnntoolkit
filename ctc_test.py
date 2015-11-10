@@ -125,5 +125,13 @@ def ctc_test1():
 		print('Epoch %d: ' % i + str(np.mean(cost)))
 		print('Training time %.2f seconds' % (time.time() - start_time))
 
-# ctc_test()
-ctc_test1()
+	print('Prediction:')
+	pred = lasagne.layers.get_output(lreshape2)
+	pred = theano.function(inputs=[linp.input_var, lmask.input_var],
+		outputs=pred,
+		allow_input_downcast=True)
+	print(np.argmax(pred(X, X_mask), -1))
+	print(y)
+
+ctc_test()
+# ctc_test1()

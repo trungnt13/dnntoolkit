@@ -230,7 +230,7 @@ def _pseudo_cost(y, y_hat, y_mask, y_hat_mask):
         gradients.
     '''
     y_hat_softmax = y_hat
-    targets = get_targets(y, (T.log(y_hat) -
+    targets = _get_targets(y, (T.log(y_hat) -
 	                          T.log(y_hat.sum(2)[:, :, None])),
 	                      y_mask, y_hat_mask)
 
