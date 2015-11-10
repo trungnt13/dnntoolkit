@@ -60,7 +60,7 @@ def ctc_test():
 	l_rec = lasagne.layers.LSTMLayer(l_inp, num_units=100) # [nb_samples,in_seq_len, 100]
 	l_shp = lasagne.layers.reshape(l_rec, (nb_samples * in_seq_len, 100))  # [nb_samples, 100]
 	l_ctc = lasagne.layers.DenseLayer(l_shp, nb_classes + 1,
-									nonlinearity=lasagne.nonlinearities.linear) # include blank: 11200x(4+1)
+									nonlinearity=lasagne.nonlinearities.softmax) # include blank: 11200x(4+1)
 	l_out = lasagne.layers.reshape(l_ctc, (nb_samples, in_seq_len, nb_classes + 1)) # 16x700x(4+1)
 
 	# ====== Variable ====== #
@@ -109,7 +109,7 @@ def ctc_test1():
 	lstm = lasagne.layers.LSTMLayer(linp, num_units=100, mask_input=lmask)
 	lreshape1 = lasagne.layers.reshape(lstm, shape=(-1, 100))
 	linear = lasagne.layers.DenseLayer(lreshape1, nb_classes + 1,
-		nonlinearity=lasagne.nonlinearities.linear)
+		nonlinearity=lasagne.nonlinearities.softmax)
 	lreshape2 = lasagne.layers.reshape(linear, shape=(-1, in_seq_len, nb_classes + 1))
 
 	# ====== Trainer ====== #
@@ -119,7 +119,7 @@ def ctc_test1():
 
 	# ====== Training ====== #
 	print('Training ...')
-	for i in xrange(100):
+	for i in xrange(10):
 		start_time = time.time()
 		cost = train(X, y, X_mask)
 		print('Epoch %d: ' % i + str(np.mean(cost)))

@@ -355,7 +355,7 @@ def get_trainer(layer, cost_func, updater=sgd(1e-4), **args):
 		# resize to 3D
 		y = y.reshape((y.shape[0], 1, y.shape[1]))
 		# resize to 3D
-		y_mask = X_mask.reshape((y_mask.shape[0], 1, y_mask.shape[1]))
+		y_mask = y_mask.reshape((y_mask.shape[0], 1, y_mask.shape[1]))
 
 		# run training function
 		s(X, y, X_mask, y_mask)

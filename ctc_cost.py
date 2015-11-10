@@ -30,7 +30,7 @@ def ctc_objective(y_pred, y, y_pred_mask=None, y_mask=None, batch=True):
 	Parameters
 	----------
 	y_pred : [nb_samples, in_seq_len, nb_classes+1]
-		energy of your predictive (i.e a un-normalized probability before softmax)
+		softmax probabilities
 	y : [nb_samples, out_seq_len]
 		output sequences
 	y_mask : [nb_samples, out_seq_len]
@@ -71,12 +71,9 @@ def ctc_objective(y_pred, y, y_pred_mask=None, y_mask=None, batch=True):
 		y_mask = y_mask.dimshuffle(1, 0)
 
 		# ====== calculate cost ====== #
-		# 3D softmax
-		y_pred_softmax = (T.exp(y_pred - y_pred.max(2)[:,:, None]) /
-		                  T.exp(y_pred - y_pred.max(2)[:,:, None]).sum(2)[:,:, None])
-		grad_cost = _pseudo_cost(y, y_pred, y_pred_softmax, y_mask, y_pred_mask)
+		grad_cost = _pseudo_cost(y, y_pred, y_mask, y_pred_mask)
 		grad_cost = grad_cost.mean()
-		monitor_cost = _cost(y, y_pred_softmax, y_mask, y_pred_mask, True)
+		monitor_cost = _cost(y, y_pred, y_mask, y_pred_mask, True)
 		monitor_cost = monitor_cost.mean()
 
 		return grad_cost, monitor_cost
@@ -91,9 +88,7 @@ def ctc_objective(y_pred, y, y_pred_mask=None, y_mask=None, batch=True):
 		y_pred = T.take(y_pred, T.nonzero(y_pred_mask, return_matrix=True), axis=0)[0]
 		y = T.take(y, T.nonzero(y_mask, return_matrix=True), axis=0).ravel()
 
-		y_pred_softmax = (T.exp(y_pred - y_pred.max(1)[:, None]) /
-		                  T.exp(y_pred - y_pred.max(1)[:, None]).sum(1)[:, None])
-		return _cost_no_batch(y_pred_softmax, y)
+		return _cost_no_batch(y_pred, y)
 
 # ======================================================================
 # Sequence Implementation (NO batch)
@@ -210,39 +205,38 @@ def _get_targets(y, log_y_hat, y_mask, y_hat_mask):
     return targets
 
 
-def _pseudo_cost(y, y_hat, y_hat_softmax, y_mask, y_hat_mask):
-	'''
-	Training objective.
-	Computes the marginal label probabilities and returns the
-	cross entropy between this distribution and y_hat, ignoring the
-	dependence of the two.
-	This cost should have the same gradient but hopefully theano will
-	use a more stable implementation of it.
-	Parameters
-	----------
-	y : matrix (L, B)
-	    the target label sequences
-	y_hat : tensor3 (T, B, C)
-	    class probabily distribution sequences, potentially in log domain
-	y_mask : matrix (L, B)
-	    indicates which values of y to use
-	y_hat_mask : matrix (T, B)
-	    indicates the lenghts of the sequences in y_hat
-	skip_softmax : bool
-	    whether to interpret y_hat as probabilities or unnormalized energy
-	    values. The latter might be more numerically stable and efficient
-	    because it avoids the computation of the explicit cost and softmax
-	    gradients.
-	'''
-	y_hat_safe = y_hat - y_hat.max(2)[:,:, None]
-	log_y_hat_softmax = (y_hat_safe -
-	                     T.log(T.exp(y_hat_safe).sum(2))[:,:, None])
-	targets = _get_targets(y, log_y_hat_softmax, y_mask, y_hat_mask)
-	# ====== calculate cost ====== #
-	mask = y_hat_mask[:,:, None]
-	y_hat_grad = y_hat_softmax - targets
-	return (y_hat * mask *
-	        theano.gradient.disconnected_grad(y_hat_grad)).sum(0).sum(1)
+def _pseudo_cost(y, y_hat, y_mask, y_hat_mask):
+    '''
+    Training objective.
+    Computes the marginal label probabilities and returns the
+    cross entropy between this distribution and y_hat, ignoring the
+    dependence of the two.
+    This cost should have the same gradient but hopefully theano will
+    use a more stable implementation of it.
+    Parameters
+    ----------
+    y : matrix (L, B)
+        the target label sequences
+    y_hat : tensor3 (T, B, C)
+        class probabily distribution sequences, potentially in log domain
+    y_mask : matrix (L, B)
+        indicates which values of y to use
+    y_hat_mask : matrix (T, B)
+        indicates the lenghts of the sequences in y_hat
+    skip_softmax : bool
+        whether to interpret y_hat as probabilities or unnormalized energy
+        values. The latter might be more numerically stable and efficient
+        because it avoids the computation of the explicit cost and softmax
+        gradients.
+    '''
+    y_hat_softmax = y_hat
+    targets = get_targets(y, (T.log(y_hat) -
+	                          T.log(y_hat.sum(2)[:, :, None])),
+	                      y_mask, y_hat_mask)
+
+    mask = y_hat_mask[:, :, None]
+    return -T.sum(theano.gradient.disconnected_grad(targets) *
+                  T.log(y_hat**mask), axis=0).sum(1)
 
 
 def _sequence_log_likelihood(y, y_hat, y_mask, y_hat_mask, blank_symbol,
