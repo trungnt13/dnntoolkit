@@ -724,7 +724,7 @@ class Speech():
 		return signal
 
 	@staticmethod
-	def logmel(signal, fs, n_filters=40, nwin=256, shift=0.01, delta=True, normalize=True):
+	def logmel(signal, fs, n_filters=40, nfft=512, nwin=256, shift=0.01, delta=True, normalize=True):
 		if len(signal.shape) > 1:
 			signal = signal.ravel()
 
@@ -733,6 +733,7 @@ class Speech():
 		# n_filters = 40 # The number of mel filter bands
 		n_ceps = 13 # The number of cepstral coefficients
 		f_min = 0. # The minimal frequency of the filter bank
+		f_max = fs / 2
 
 		# overlap = nwin - int(shift * fs)
 
@@ -744,8 +745,8 @@ class Speech():
 		# 3. logmel.
 		# MFCC
 		logmel = sidekit.frontend.features.mfcc(signal,
-						lowfreq=f_min, maxfreq=fs / 2,
-						nlinfilt=0, nlogfilt=n_filters, nfft=512,
+						lowfreq=f_min, maxfreq=f_max,
+						nlinfilt=0, nlogfilt=n_filters, nfft=nfft,
 						fs=fs, nceps=n_ceps, midfreq=1000,
 						nwin=nwin, shift=shift,
 						get_spec=False, get_mspec=True)
@@ -774,16 +775,11 @@ class Speech():
 		return logmel
 
 	@staticmethod
-	def mfcc(signal, fs, n_ceps, delta=True, normalize=True):
+	def mfcc(signal, fs, n_ceps, n_filters=40, nfft=512, nwin=256, shift=0.01, delta=True, normalize=True):
 		#####################################
 		# 1. Const.
-		fs = 8000
-		n_filters = 40 # The number of filter bands
 		f_min = 0. # The minimal frequency of the filter bank
-
-		nwin = 256
-		shift = 0.01
-
+		f_max = fs / 2
 		#####################################
 		# 2. Speech.
 		signal = Speech.preprocess(signal)
@@ -792,16 +788,17 @@ class Speech():
 		# 3. mfcc.
 		# MFCC
 		mfcc = sidekit.frontend.features.mfcc(signal,
-						lowfreq=f_min, maxfreq=fs / 2,
-						nlinfilt=0, nlogfilt=n_filters, nfft=512,
+						lowfreq=f_min, maxfreq=f_max,
+						nlinfilt=0, nlogfilt=n_filters, nfft=nfft,
 						fs=fs, nceps=n_ceps, midfreq=1000,
 						nwin=nwin, shift=shift,
 						get_spec=False, get_mspec=False)[0]
-		delta1 = sidekit.frontend.features.compute_delta(mfcc,
-						win=3, method='filter')
-		delta2 = sidekit.frontend.features.compute_delta(delta1,
-						win=3, method='filter')
-		mfcc = np.concatenate((mfcc, delta1, delta2), 1)
+		if delta:
+			delta1 = sidekit.frontend.features.compute_delta(mfcc,
+							win=3, method='filter')
+			delta2 = sidekit.frontend.features.compute_delta(delta1,
+							win=3, method='filter')
+			mfcc = np.concatenate((mfcc, delta1, delta2), 1)
 
 		# VAD
 		idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
