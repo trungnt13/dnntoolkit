@@ -8,11 +8,16 @@
 # * sidekit
 # * paramiko
 # * soundfile
+# * h5py
 # ======================================================================
 from __future__ import print_function, division
 
 import os
 import sys
+import math
+
+from itertools import izip
+from collections import OrderedDict
 
 import numpy as np
 import scipy as sp
@@ -22,13 +27,75 @@ from theano import tensor as T
 
 import h5py
 
-from itertools import izip
 
 import sidekit
 import soundfile
 
 import paramiko
 from stat import S_ISDIR
+
+# ======================================================================
+# Multiprocessing
+# ======================================================================
+class mpi():
+
+	"""docstring for mpi"""
+	@staticmethod
+	def segment_job(file_list, n_seg):
+		'''
+		Example
+		-------
+			>>> segment_job([1,2,3,4,5],2)
+			>>> [[1, 2, 3], [4, 5]]
+			>>> segment_job([1,2,3,4,5],4)
+			>>> [[1], [2], [3], [4, 5]]
+		'''
+		# by floor, make sure and process has it own job
+		size = int(np.ceil(len(file_list) / float(n_seg)))
+		if size * n_seg - len(file_list) > size:
+			size = int(np.floor(len(file_list) / float(n_seg)))
+
+		# start segmenting
+		segments = []
+		for i in xrange(n_seg):
+			start = i * size
+			if i < n_seg - 1:
+				end = start + size
+			else:
+				end = max(start + size, len(file_list))
+			segments.append(file_list[start:end])
+		return segments
+
+	@staticmethod
+	def div_n_con(path, file_list, n_job, div_func, con_func):
+		''' Divide and conquer strategy for multiprocessing.
+
+		Parameters
+		----------
+		path : str
+			path to save the result, all temp file save to path0, path1, path2...
+		file_list : list
+			list of all file or all job to do processing
+		n_job : int
+			number of processes
+		div_func : function(save_path, jobs_list)
+			divide function, execute for each partition of job
+		con_func : function(save_path, temp_paths)
+			function to merge all the result
+
+		Returns
+		-------
+		return : list(Process)
+			div_processes and con_processes
+
+		'''
+		import multiprocessing
+		job_list = mpi.segment_job(file_list, n_job)
+		file_path = [path + str(i) for i in xrange(n_job)]
+		div_processes = [multiprocessing.Process(target=div_func, args=(file_path[i], job_list[i])) for i in xrange(n_job)]
+		con_processes = multiprocessing.Process(target=con_func, args=(path, file_path))
+		return div_processes, con_processes
+
 
 # ======================================================================
 # Computing hyper-parameters
@@ -253,51 +320,236 @@ class EarlyStop(object):
 # ======================================================================
 # Data Preprocessing
 # ======================================================================
-class Dataset():
+class _batch(object):
 
-	"""docstring for HDF5Dataset"""
+	"""docstring for _batch"""
 
-	def __init__(self, path):
-		super(Dataset, self).__init__()
-		self.hdf = h5py.File(path, 'w')
+	def __init__(self, dataset, name):
+		super(_batch, self).__init__()
+		if (dataset is None or name is None):
+			raise AttributeError('Must specify (hdf,name) or data')
+		self._dataset = dataset
+		self._name = name
 
-	def put(self, data, append=True):
-		pass
+		self._data = None
+		if self._name in self._dataset.hdf:
+			self._data = dataset.hdf[name]
 
 	@property
 	def shape(self):
-	    return self.dataset.shape
+		return self._data.shape
+
+	@property
+	def dtype(self):
+		return self._data.dtype
+
+	@property
+	def value(self):
+		return self._data.value
+
+	# ==================== Safty first ==================== #
+
+	def _append_data(self, data):
+		curr_size = self._data.shape[0]
+		self._data.resize(curr_size + data.shape[0], 0)
+		self._data[curr_size:] = data
+
+	def _check_data(self, shape, dtype):
+		if self._data is None:
+			if self._name not in self._dataset:
+				self._dataset.hdf.create_dataset(self._name, dtype=dtype,
+					shape=(0,) + shape[1:], maxshape=(None, ) + shape[1:], chunks=True)
+			self._data = self._dataset.hdf[self._name]
+
+		if self._data.shape[1:] != shape[1:]:
+			raise TypeError('Shapes not match ' + str(self.shape) + ' - ' + str(shape))
+
+	# ==================== manupilation ==================== #
+	def __add__(self, other):
+		if not isinstance(other, np.ndarray):
+			raise TypeError('Addition only for numpy ndarray')
+		self._check_data(other.shape, other.dtype)
+		self._append_data(other)
+		return self
+
+	def __mul__(self, other):
+		if not isinstance(other, int):
+			raise TypeError('Only mutilply with int')
+		if self._data is None:
+			raise TypeError("Data haven't initlized yet")
+		copy = self._data[:]
+		for i in xrange(other - 1):
+			self._append_data(copy)
+		return self
 
 	def __len__(self):
-		return self.dataset.shape[0]
+		return self._data.shape[0]
+
+	def iter(self, shuffle=True):
+		block_batch = self._dataset.create_batch(self.shape[0])
+		for block, idx_batches in block_batch.iteritems():
+			data = self._data[block[0]:block[1] + 1]
+			batches = idx_batches[1]
+			# shuffle is performed on big block, increase reliablity and performance
+			if shuffle:
+				idx = idx_batches[0]
+				data = data[idx]
+			# return smaller batches
+			for b in batches:
+				s = b[0] - block[0]
+				e = b[1] - block[0] + 1
+				if self._dataset.normalizer is not None:
+					yield self._dataset.normalizer(data[s:e])
+				else:
+					yield data[s:e]
+
+	def __iter__(self):
+		block_batch = self._dataset.create_batch(self.shape[0])
+		for block, idx_batches in block_batch.iteritems():
+			data = self._data[block[0]:block[1] + 1]
+			batches = idx_batches[1]
+			# shuffle is performed on big block, increase reliablity and performance
+			if self._dataset.shuffle:
+				idx = idx_batches[0]
+				data = data[idx]
+			# return smaller batches
+			for b in batches:
+				s = b[0] - block[0]
+				e = b[1] - block[0] + 1
+				if self._dataset.normalizer is not None:
+					yield self._dataset.normalizer(data[s:e])
+				else:
+					yield data[s:e]
 
 	def __getitem__(self, key):
-		if isinstance(key, slice):
-		    if key.stop + self.start <= self.end:
-		        idx = slice(key.start + self.start, key.stop + self.start)
-		    else:
-		        raise IndexError
-		elif isinstance(key, int):
-		    if key + self.start < self.end:
-		        idx = key + self.start
-		    else:
-		        raise IndexError
-		elif isinstance(key, np.ndarray):
-		    if np.max(key) + self.start < self.end:
-		        idx = (self.start + key).tolist()
-		    else:
-		        raise IndexError
-		elif isinstance(key, list):
-		    if max(key) + self.start < self.end:
-		        idx = [x + self.start for x in key]
-		    else:
-		        raise IndexError
-		if self.normalizer is not None:
-		    return self.normalizer(self.data[idx])
+		if self._dataset.normalizer is not None:
+		    return self._dataset.normalizer(self._data[key])
 		else:
-		    return self.data[idx]
+		    return self._data[key]
 
+	def __setitem__(self, key, value):
+		self._check_data(value.shape, value.dtype)
+		if isinstance(key, slice):
+			self._data[key] = value
 
+	def __str__(self):
+		if self._data is None:
+			return 'None'
+		return '<' + self._name + ' ' + str(self.shape) + ' ' + str(self.dtype) + '>'
+
+class Dataset(object):
+
+	'''
+		Example
+		-------
+			def normalization(x):
+				return x.astype(np.float32)
+
+			d = dnntoolkit.Dataset('tmp.hdf', 'w', normalizer=normalization, batch_size=2, shuffle=True)
+			d['X'] = np.zeros((2, 3))
+			print('X' in d)
+			>>> True
+
+			d['X'][:1] = np.ones((1, 3))
+			print(d['X'][:])
+			>>> [[1,1,1],
+			>>>	 [0,0,0]]
+
+			for i in xrange(2):
+				d['X'] += np.ones((1, 3))
+			print(d['X'][:])
+			>>> [[1,1,1],
+			>>>	 [0,0,0],
+			>>>  [1,1,1],
+			>>>  [1,1,1]]
+
+			d['X'] *= 2 # duplicate the data
+			print(d['X'][:])
+			>>> [[1,1,1],
+			>>>	 [0,0,0],
+			>>>  [1,1,1],
+			>>>  [1,1,1],
+			>>>  [1,1,1],
+			>>>	 [0,0,0],
+			>>>  [1,1,1],
+			>>>  [1,1,1]]
+
+			for i in d['X']: # shuffle configuration inherit from dataset
+				print(str(i.shape) + '-' + str(i.dtype))
+			>>> (2,3) - float64
+			>>> (2,3) - float64
+			>>> (2,3) - float64
+			>>> (2,3) - float64
+
+			d.shuffle_data() # for new order of data
+			for i in d['X'].iter(shuffle=True):
+				print(str(i.shape) + '-' + str(i.dtype))
+
+			d.close()
+	'''
+
+	def __init__(self, path, mode='r', batch_size=512, normalizer=None, shuffle=True):
+		super(Dataset, self).__init__()
+		if not isinstance(batch_size, int):
+			raise TypeError('Batch size must be integer')
+
+		self.hdf = h5py.File(path, mode=mode)
+		self._datamap = {}
+		self.batch_size = batch_size
+		self.block_size = 8 * batch_size # load big block, then yield smaller batches
+		self.shuffle = shuffle # shuffle is done on each block
+
+		self.normalizer = normalizer
+		self._seed = 12082518
+
+	def shuffle_data(self):
+		''' re-shuffle dataset to make sure new order come every epoch '''
+		import time
+		self._seed = int(time.time())
+
+	def create_batch(self, nb_samples):
+		# makesure all iterator give same order
+		np.random.seed(self._seed)
+
+		idx = np.arange(0, nb_samples) # this will consume a lot memory
+		# ceil is safer for GPU, expected worst case of smaller number of batch size
+		n_block = max(int(np.ceil(nb_samples / self.block_size)), 1)
+		block_jobs = mpi.segment_job(idx, n_block)
+		batch_jobs = []
+		for j in block_jobs:
+			n_batch = max(int(np.ceil(len(j) / self.batch_size)), 1)
+			job = mpi.segment_job(j, n_batch)
+			batch_jobs.append([(i[0], i[-1]) for i in job])
+		jobs = OrderedDict()
+		for i, j in izip(block_jobs, batch_jobs):
+			idx = np.random.permutation(len(i))
+			jobs[(i[0], i[-1])] = (idx, j)
+		return jobs
+
+	def __getitem__(self, key):
+		if key not in self._datamap:
+			self._datamap[key] = _batch(self, key)
+		return self._datamap[key]
+
+	def __setitem__(self, key, value):
+		if key not in self.hdf:
+			self.hdf.create_dataset(key, data=value, dtype=value.dtype,
+				maxshape=(None,) + value.shape[1:], chunks=True)
+		if key not in self._datamap:
+			self._datamap[key] = _batch(self, key)
+
+	def __contains__(self, key):
+		return key in self.hdf
+
+	def close(self):
+		self.hdf.close()
+
+	def __del__(self):
+		try:
+			self.hdf.close()
+			del self.hdf
+		except:
+			pass
 # ======================================================================
 # Visualiztion
 # ======================================================================
