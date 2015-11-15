@@ -96,6 +96,25 @@ class mpi():
 		con_processes = multiprocessing.Process(target=con_func, args=(path, file_path))
 		return div_processes, con_processes
 
+# ======================================================================
+# io helper
+# ======================================================================
+class io():
+
+	@staticmethod
+	def extract_files(path, filter_func=None):
+		''' Recurrsively get all files in the given path '''
+		file_list = []
+		for p in os.listdir(path):
+			p = os.path.join(path, p)
+			if os.path.isdir(p):
+				f = io.extract_files(p, filter_func)
+				if f is not None: file_list += f
+			else:
+				if filter_func is not None and not filter_func(p):
+					continue
+				file_list.append(p)
+		return file_list
 
 # ======================================================================
 # Computing hyper-parameters
@@ -591,6 +610,9 @@ class Visual():
 	def spectrogram(s, ax=None):
 		from matplotlib import pyplot as plt
 
+		if s.shape[0] == 1 or s.shape[1] == 1:
+			pass
+
 		ax = ax if ax is not None else plt.gca()
 		if s.shape[0] > s.shape[1]:
 			s = s.T
@@ -708,6 +730,11 @@ class Speech():
 
 	@staticmethod
 	def read(f, pcm = False):
+		'''
+		Return
+		------
+			waveform (ndarray), sample rate (int)
+		'''
 		if pcm or (isinstance(f, str) and 'pcm' in f):
 			return np.memmap(f, dtype=np.int16, mode='r')
 		return soundfile.read(f)
@@ -724,7 +751,20 @@ class Speech():
 		return signal
 
 	@staticmethod
-	def logmel(signal, fs, n_filters=40, nfft=512, nwin=256, shift=0.01, delta=True, normalize=True):
+	def timit_phonemes(p, map39=False):
+		''' Mapping from 61 classes to 39 classes '''
+		phonemes = ['aa', 'ae', 'ah', 'ao', 'aw', 'ax', 'ax-h', 'axr', 'ay',
+			'b', 'bcl', 'ch', 'd', 'dcl', 'dh', 'dx', 'eh', 'el', 'em', 'en', 'eng',
+			'epi', 'er', 'ey', 'f', 'g', 'gcl', 'h#', 'hh', 'hv', 'ih', 'ix', 'iy',
+			'jh', 'k', 'kcl', 'l', 'm', 'n', 'ng', 'nx', 'ow', 'oy', 'p', 'pau',
+			'pcl', 'q', 'r', 's', 'sh', 't', 'tcl', 'th', 'uh', 'uw', 'ux', 'v',
+			'w', 'y', 'z', 'zh']
+		return phonemes.index(p)
+
+	@staticmethod
+	def logmel(signal, fs, n_filters=40, nfft=512, win=0.025, shift=0.01,
+			delta1=True, delta2=True, energy=True,
+			normalize=True, vad=True, clean=True):
 		if len(signal.shape) > 1:
 			signal = signal.ravel()
 
@@ -734,37 +774,45 @@ class Speech():
 		n_ceps = 13 # The number of cepstral coefficients
 		f_min = 0. # The minimal frequency of the filter bank
 		f_max = fs / 2
-
+		nwin = fs * win
 		# overlap = nwin - int(shift * fs)
 
 		#####################################
 		# 2. preprocess.
-		signal = Speech.preprocess(signal)
+		if clean:
+			signal = Speech.preprocess(signal)
 
 		#####################################
 		# 3. logmel.
-		# MFCC
 		logmel = sidekit.frontend.features.mfcc(signal,
 						lowfreq=f_min, maxfreq=f_max,
 						nlinfilt=0, nlogfilt=n_filters, nfft=nfft,
 						fs=fs, nceps=n_ceps, midfreq=1000,
 						nwin=nwin, shift=shift,
 						get_spec=False, get_mspec=True)
-		# energy = logmel[1]
+		logenergy = logmel[1]
 		logmel = logmel[3]
+		# TODO: check how to calculate energy delta
+		if energy:
+			logmel = np.concatenate((logmel, logenergy.reshape(-1, 1)), axis=1)
 
 		#####################################
 		# 4. delta.
-		if delta:
-			delta1 = sidekit.frontend.features.compute_delta(logmel,
+		tmp = [logmel]
+		if delta1 or delta2:
+			d1 = sidekit.frontend.features.compute_delta(logmel,
 							win=3, method='filter')
-			delta2 = sidekit.frontend.features.compute_delta(delta1,
+			d2 = sidekit.frontend.features.compute_delta(delta1,
 							win=3, method='filter')
-			logmel = np.concatenate((logmel, delta1, delta2), 1)
+			if delta1: tmp.append(d1)
+			if delta2: tmp.append(d2)
+		logmel = np.concatenate(tmp, 1)
 
-		# VAD
-		idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
-		logmel = logmel[idx, :]
+		#####################################
+		# 5. VAD and normalize.
+		if vad:
+			idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
+			logmel = logmel[idx, :]
 
 		# Normalize
 		if normalize:
@@ -775,14 +823,19 @@ class Speech():
 		return logmel
 
 	@staticmethod
-	def mfcc(signal, fs, n_ceps, n_filters=40, nfft=512, nwin=256, shift=0.01, delta=True, normalize=True):
+	def mfcc(signal, fs, n_ceps, n_filters=40, nfft=512, win=0.025, shift=0.01,
+			delta1=True, delta2=True, energy=True,
+			normalize=True, vad=True, clean=True):
 		#####################################
 		# 1. Const.
 		f_min = 0. # The minimal frequency of the filter bank
 		f_max = fs / 2
+		nwin = fs * win
+
 		#####################################
 		# 2. Speech.
-		signal = Speech.preprocess(signal)
+		if clean:
+			signal = Speech.preprocess(signal)
 
 		#####################################
 		# 3. mfcc.
@@ -792,17 +845,29 @@ class Speech():
 						nlinfilt=0, nlogfilt=n_filters, nfft=nfft,
 						fs=fs, nceps=n_ceps, midfreq=1000,
 						nwin=nwin, shift=shift,
-						get_spec=False, get_mspec=False)[0]
-		if delta:
-			delta1 = sidekit.frontend.features.compute_delta(mfcc,
-							win=3, method='filter')
-			delta2 = sidekit.frontend.features.compute_delta(delta1,
-							win=3, method='filter')
-			mfcc = np.concatenate((mfcc, delta1, delta2), 1)
+						get_spec=False, get_mspec=False)
+		logenergy = mfcc[1]
+		mfcc = mfcc[0]
 
+		if energy:
+			mfcc = np.concatenate((mfcc, logenergy.reshape(-1, 1)), axis=1)
+		#####################################
+		# 4. Add more information.
+		tmp = [mfcc]
+		if delta1 or delta2:
+			d1 = sidekit.frontend.features.compute_delta(mfcc,
+							win=3, method='filter')
+			d2 = sidekit.frontend.features.compute_delta(d1,
+							win=3, method='filter')
+			if delta1: tmp.append(d1)
+			if delta2: tmp.append(d2)
+		mfcc = np.concatenate(tmp, 1)
+		#####################################
+		# 5. Vad and normalize.
 		# VAD
-		idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
-		mfcc = mfcc[idx, :]
+		if vad:
+			idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
+			mfcc = mfcc[idx, :]
 
 		# Normalize
 		if normalize:
