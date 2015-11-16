@@ -200,22 +200,37 @@ def get_trainer(layer, cost_func, updater=sgd(1e-4), **args):
 	X_mask_ = T.tensor3(dtype=floatX)
 	y_mask_ = T.tensor3(dtype=floatX)
 
-	# ====== scan ====== #
-	def step(i, X, y, X_mask, y_mask):
+	# ====== train ====== #
+	def step_update(i, X, y, X_mask, y_mask):
 		y_pred = lasagne.layers.get_output(layer, _get_input_and_mask_layer(layers, X, X_mask))
 		cost = cost_func(y_pred, y, X_mask, y_mask, **args)
 		update = updater(cost, all_params)
 		update[_cost] = T.set_subtensor(_cost[i:], T.cast(cost, floatX))
 		return update
 
-	result, update = theano.scan(step,
+	result, update = theano.scan(step_update,
 		sequences=[_cost_idx, X_, y_, X_mask_, y_mask_])
 
 	s = theano.function(inputs=[X_, y_, X_mask_, y_mask_],
 		updates=update,
 		allow_input_downcast=True)
 
-	def trainer(X, y, X_mask=None, y_mask=None):
+	# ====== cost ====== #
+	def step_cost(X, y, X_mask, y_mask):
+		y_pred = lasagne.layers.get_output(layer, _get_input_and_mask_layer(layers, X, X_mask))
+		cost = cost_func(y_pred, y, X_mask, y_mask, **args)
+		return cost
+
+	result, update = theano.scan(step_cost,
+		sequences=[X_, y_, X_mask_, y_mask_],
+		outputs_info=None)
+
+	c = theano.function(inputs=[X_, y_, X_mask_, y_mask_],
+		outputs=result,
+		allow_input_downcast=True)
+
+	# ====== create function ====== #
+	def train_function(X, y, X_mask=None, y_mask=None):
 		if X_mask is None:
 			X_mask = np.ones(X.shape[:-1])
 		if y_mask is None:
@@ -235,4 +250,23 @@ def get_trainer(layer, cost_func, updater=sgd(1e-4), **args):
 		s(X, y, X_mask, y_mask)
 
 		return _cost[:(X.shape[0] - 1)].eval()
-	return trainer
+
+	def cost_function(X, y, X_mask=None, y_mask=None):
+		if X_mask is None:
+			X_mask = np.ones(X.shape[:-1])
+		if y_mask is None:
+			y_mask = np.ones(y.shape)
+		# ====== expand 1 more dimension to represent batch_size=1 ====== #
+		# resize to 4D
+		X = X.reshape((X.shape[0], 1, X.shape[1], X.shape[2]))
+		# resize to 3D
+		X_mask = X_mask.reshape((X_mask.shape[0], 1, X_mask.shape[1]))
+
+		# resize to 3D
+		y = y.reshape((y.shape[0], 1, y.shape[1]))
+		# resize to 3D
+		y_mask = y_mask.reshape((y_mask.shape[0], 1, y_mask.shape[1]))
+
+		return c(X, y, X_mask, y_mask)
+
+	return train_function, cost_function
