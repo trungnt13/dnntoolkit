@@ -66,36 +66,35 @@ def ctc_test():
 	# ====== Variable ====== #
 	y_pred = lasagne.layers.get_output(l_out, X_)
 	all_params = lasagne.layers.get_all_params(l_out, trainable=True)
-	grad_cost, real_cost = ctc_cost.ctc_objective(y_pred, y_)
+	grad_cost, real_cost = ctc_cost.ctc_objective(y_pred, y_, X_mask_, y_mask_)
 
 	all_grads = T.grad(grad_cost, all_params)
 	updates = lasagne.updates.rmsprop(all_grads, all_params, learning_rate=1e-3)
 
 	# ====== Funcition ====== #
-	train = theano.function(inputs=[X_, y_],
+	train = theano.function(inputs=[X_, y_, X_mask_, y_mask_],
 	                        outputs=[grad_cost, real_cost],
 	                        updates=updates,
 	                        allow_input_downcast=True,
 	                        on_unused_input='ignore')
-	y_pred_softmax = T.exp(y_pred) / T.exp(y_pred).sum(axis=-1)[:,:, None]
-	pred = theano.function(inputs=[X_], outputs=y_pred_softmax, allow_input_downcast=True)
-	grad_obj = theano.function(inputs=[X_, y_], outputs=grad_cost, allow_input_downcast=True)
-	real_obj = theano.function(inputs=[X_, y_], outputs=real_cost, allow_input_downcast=True)
-	grad_check = theano.function(inputs=[X_, y_], outputs=all_grads, allow_input_downcast=True)
+	pred = theano.function(inputs=[X_], outputs=y_pred, allow_input_downcast=True)
+	grad_obj = theano.function(inputs=[X_, y_, X_mask_, y_mask_], outputs=grad_cost, allow_input_downcast=True)
+	real_obj = theano.function(inputs=[X_, y_, X_mask_, y_mask_], outputs=real_cost, allow_input_downcast=True)
+	grad_check = theano.function(inputs=[X_, y_, X_mask_, y_mask_], outputs=all_grads, allow_input_downcast=True)
 
 	# ====== Training ====== #
 	start_time = time.time()
 	for i in xrange(100):
-		grad_cost, real_cost = train(X, y)
+		grad_cost, real_cost = train(X, y, X_mask, y_mask)
 		if i % 10 == 0:
 			print('Epoch %d: ' % i + str(grad_cost) + '-' + str(real_cost))
-		for t in grad_check(X, y):
+		for t in grad_check(X, y, X_mask, y_mask):
 			if np.isnan(np.min(t)) or np.isinf(np.sum(t)):
 				print('Gradient exploded!')
 	print('Training time %.2f seconds' % (time.time() - start_time))
 
 	print('Prediction:')
-	print(np.argmax(pred(X), -1))
+	print(pred(X))
 	print(y)
 
 def ctc_test1():

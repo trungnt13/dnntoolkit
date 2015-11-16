@@ -59,9 +59,8 @@ def ctc_objective(y_pred, y, y_pred_mask=None, y_mask=None, batch=True):
 
 		You will need gradient clipping to prevent exploding gradients as well.
 	'''
-	y = T.cast(y, dtype='int32')
-	y_pred_mask = y_pred_mask if y_pred_mask else T.ones((y_pred.shape[0], y_pred.shape[1]), dtype=floatX)
-	y_mask = y_mask if y_mask else T.ones(y.shape, dtype=floatX)
+	y_pred_mask = y_pred_mask if y_pred_mask is not None else T.ones((y_pred.shape[0], y_pred.shape[1]), dtype=floatX)
+	y_mask = y_mask if y_mask is not None else T.ones(y.shape, dtype=floatX)
 	if batch:
 		# ====== reshape input ====== #
 		y_pred = y_pred.dimshuffle(1, 0, 2)
@@ -70,13 +69,15 @@ def ctc_objective(y_pred, y, y_pred_mask=None, y_mask=None, batch=True):
 		y_mask = y_mask.dimshuffle(1, 0)
 
 		# ====== calculate cost ====== #
-		grad_cost = _pseudo_cost(y, y_pred, y_mask, y_pred_mask)
+		grad_cost = _pseudo_cost(y, y_pred, y_mask, y_pred_mask, False)
 		grad_cost = grad_cost.mean()
 		monitor_cost = _cost(y, y_pred, y_mask, y_pred_mask, True)
 		monitor_cost = monitor_cost.mean()
 
 		return grad_cost, monitor_cost
 	else:
+		y = T.cast(y, dtype='int32')
+
 		# batch_size=1 => just take [0] to reduce 1 dimension
 		y_pred = y_pred[0]
 		y_pred_mask = y_pred_mask[0]
@@ -204,7 +205,7 @@ def _get_targets(y, log_y_hat, y_mask, y_hat_mask):
     return targets
 
 
-def _pseudo_cost(y, y_hat, y_mask, y_hat_mask):
+def _pseudo_cost(y, y_hat, y_mask, y_hat_mask, skip_softmax=False):
     '''
     Training objective.
     Computes the marginal label probabilities and returns the
@@ -228,12 +229,25 @@ def _pseudo_cost(y, y_hat, y_mask, y_hat_mask):
         because it avoids the computation of the explicit cost and softmax
         gradients.
     '''
-    y_hat_softmax = y_hat
-    targets = _get_targets(y, (T.log(y_hat) -
-	                          T.log(y_hat.sum(2)[:, :, None])),
-	                      y_mask, y_hat_mask)
+    if skip_softmax:
+        y_hat_softmax = (T.exp(y_hat - y_hat.max(2)[:,:, None]) /
+                         T.exp(y_hat -
+                               y_hat.max(2)[:,:, None]).sum(2)[:,:, None])
+        y_hat_safe = y_hat - y_hat.max(2)[:,:, None]
+        log_y_hat_softmax = (y_hat_safe -
+                             T.log(T.exp(y_hat_safe).sum(2))[:,:, None])
+        targets = _get_targets(y, log_y_hat_softmax, y_mask, y_hat_mask)
+    else:
+        y_hat_softmax = y_hat
+        targets = _get_targets(y, (T.log(y_hat) -
+                                  T.log(y_hat.sum(2)[:,:, None])),
+                              y_mask, y_hat_mask)
 
-    mask = y_hat_mask[:, :, None]
+    mask = y_hat_mask[:,:, None]
+    if skip_softmax:
+        y_hat_grad = y_hat_softmax - targets
+        return (y_hat * mask *
+                theano.gradient.disconnected_grad(y_hat_grad)).sum(0).sum(1)
     return -T.sum(theano.gradient.disconnected_grad(targets) *
                   T.log(y_hat**mask), axis=0).sum(1)
 
@@ -483,9 +497,9 @@ def _log_path_probabs(y, log_y_hat, y_mask, y_hat_mask, blank_symbol,
         y_mask = y_mask[::-1]
         # going backwards, the first non-zero alpha value should be the
         # first non-masked label.
-        start_positions = T.cast(n_labels - y_mask.sum(0), 'int64')
+        start_positions = T.cast(n_labels - y_mask.sum(0), 'int32')
     else:
-        start_positions = T.zeros((batch_size,), dtype='int64')
+        start_positions = T.zeros((batch_size,), dtype='int32')
 
     log_pred_y = _class_batch_to_labeling_batch(y, log_y_hat, y_hat_mask)
     log_pred_y = log_pred_y.dimshuffle(0, 2, 1)
