@@ -354,6 +354,7 @@ class _batch(object):
 		if self._name in self._dataset.hdf:
 			self._data = dataset.hdf[name]
 
+	# ==================== Properties ==================== #
 	@property
 	def shape(self):
 		return self._data.shape
@@ -365,6 +366,48 @@ class _batch(object):
 	@property
 	def value(self):
 		return self._data.value
+
+	# ==================== Arithmetic ==================== #
+	def sum(self, axis=0):
+		s = 0
+		isInit = False
+		for X in self.iter(shuffle=False):
+			X = X.astype(np.float64)
+			if axis == 0:
+				# for more stable precision
+				s += np.sum(X, 0)
+			else:
+				if not isInit:
+					s = [np.sum(X, axis)]
+					isInit = True
+				else:
+					s.append(np.sum(X, axis))
+		if isinstance(s, list):
+			s = np.concatenate(s, axis=0)
+		return s
+
+	def mean(self, axis=0):
+		s = self.sum(axis)
+		return s / self.shape[axis]
+
+	def var(self, axis=0):
+		v = 0
+		isInit = False
+		n = self.shape[axis]
+		for X in self.iter(shuffle=False):
+			X = X.astype(np.float64)
+			if axis == 0:
+				v += np.sum(np.power(X, 2), axis) - \
+                                    1 / n * np.power(np.sum(X, axis), 2)
+			else:
+				if not isInit:
+					v = [np.sum(np.power(X, 2), axis) - 1 / n * np.power(np.sum(X, axis), 2)]
+					isInit = True
+				else:
+					v.append(np.sum(np.power(X, 2), axis) - 1 / n * np.power(np.sum(X, axis), 2))
+		if isinstance(v, list):
+			v = np.concatenate(v, axis=0)
+		return v / n
 
 	# ==================== Safty first ==================== #
 
@@ -404,8 +447,8 @@ class _batch(object):
 	def __len__(self):
 		return self._data.shape[0]
 
-	def iter(self, shuffle=True):
-		block_batch = self._dataset.create_batch(self.shape[0])
+	def iter(self, shuffle=True, batch_size=None):
+		block_batch = self._dataset.create_batch(self.shape[0], batch_size=batch_size)
 		for block, idx_batches in block_batch.iteritems():
 			data = self._data[block[0]:block[1] + 1]
 			batches = idx_batches[1]
@@ -515,28 +558,44 @@ class Dataset(object):
 		self.hdf = h5py.File(path, mode=mode)
 		self._datamap = {}
 		self.batch_size = batch_size
-		self.block_size = 8 * batch_size # load big block, then yield smaller batches
 		self.shuffle = shuffle # shuffle is done on each block
 
 		self.normalizer = normalizer
 		self._seed = 12082518
 
+	# ==================== Arithmetic ==================== #
+	def all_dataset(self, fileter_func=None, path='/'):
+		res = []
+		for p in self.hdf[path].keys():
+			p = os.path.join(path, p)
+			if 'Dataset' in str(type(self.hdf[p])):
+				if fileter_func is not None and not fileter_func(p):
+					continue
+				res.append(p)
+			elif 'Group' in str(type(self.hdf[p])):
+				res += self.all_dataset(fileter_func, path=p)
+		return res
+
+	# ==================== Main ==================== #
 	def shuffle_data(self):
 		''' re-shuffle dataset to make sure new order come every epoch '''
 		import time
 		self._seed = int(time.time())
 
-	def create_batch(self, nb_samples):
+	def create_batch(self, nb_samples, batch_size = None):
+		if batch_size is None:
+			batch_size = self.batch_size
+		block_size = 8 * batch_size # load big block, then yield smaller batches
 		# makesure all iterator give same order
 		np.random.seed(self._seed)
 
 		idx = np.arange(0, nb_samples) # this will consume a lot memory
 		# ceil is safer for GPU, expected worst case of smaller number of batch size
-		n_block = max(int(np.ceil(nb_samples / self.block_size)), 1)
+		n_block = max(int(np.ceil(nb_samples / block_size)), 1)
 		block_jobs = mpi.segment_job(idx, n_block)
 		batch_jobs = []
 		for j in block_jobs:
-			n_batch = max(int(np.ceil(len(j) / self.batch_size)), 1)
+			n_batch = max(int(np.ceil(len(j) / batch_size)), 1)
 			job = mpi.segment_job(j, n_batch)
 			batch_jobs.append([(i[0], i[-1]) for i in job])
 		jobs = OrderedDict()
