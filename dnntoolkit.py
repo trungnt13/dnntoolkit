@@ -9,12 +9,14 @@
 # * paramiko
 # * soundfile
 # * h5py
+# * pandas
 # ======================================================================
 from __future__ import print_function, division
 
 import os
 import sys
 import math
+import time
 
 from itertools import izip
 from collections import OrderedDict
@@ -27,6 +29,7 @@ from theano import tensor as T
 
 import h5py
 
+import pandas as pd
 
 import sidekit
 import soundfile
@@ -164,6 +167,147 @@ def batch_size(data_shape, gpu_model=GPU.K40, performance=None, bandwidth=None, 
 # ======================================================================
 # Early stopping
 # ======================================================================
+# TODO: Add implementation for loading the whole models
+class Model(object):
+
+	"""docstring for Model
+	"""
+
+	def __init__(self):
+		super(Model, self).__init__()
+		self._history = []
+		self._weights = []
+		self._model = ['abc' for i in xrange(10)]
+
+	# ==================== Model manager ==================== #
+	def set_weights(self, weights):
+		self._weights = []
+		for w in weights:
+			self._weights.append(w)
+
+	def get_weights(self):
+		return self._weights
+
+	# ==================== History manager ==================== #
+	def record(self, tags, values):
+		# in GMT
+		curr_time = int(round(time.time() * 1000)) # in ms
+
+		# timestamp must never equal
+		if len(self._history) > 0 and self._history[-1][0] >= curr_time:
+			curr_time = self._history[-1][0] + 1
+
+		if not hasattr(tags, '__len__'):
+			tags = [tags]
+		self._history.append([curr_time, tags, values])
+
+	def select(self, tags, after=None, before=None, n=None, filter_value=None,
+		absolute=False, newest_first=False, return_time=False):
+		''' Query in history
+
+		Parameters
+		----------
+		tags : list, str, object
+			get all values contain given tags
+		after, before : time constraint
+			after < t < before
+		n : int
+			number of record return
+		filter_value : function
+			function to filter each value found
+		absolute : boolean
+			whether required the same set of tags or just contain
+
+		Returns
+		-------
+		return : list
+			list of all values found
+		'''
+		# ====== preprocess arguments ====== #
+		history = self._history
+		if len(history) == 0:
+			return None
+		if not hasattr(tags, '__len__'):
+			tags = [tags]
+		if absolute: tags = set(tags)
+		if after is None:
+			after = history[0][0]
+		if before is None:
+			before = history[-1][0]
+		if n is None or n < 0:
+			n = len(history)
+
+		# ====== searching ====== #
+		res = []
+		for row in history:
+			# check time
+			time = row[0]
+			if time < after or time > before:
+				continue
+			# check tags
+			if not absolute:
+				tag = sum([t not in row[1] for t in tags])
+			else:
+				tag = not (tags == set(row[1]))
+			if tag > 0:
+				continue
+			# check value
+			val = row[2]
+			if filter_value is not None and not filter_value(val):
+				continue
+			# ok, found it!
+			res.append((time, val))
+
+		# ====== return results ====== #
+		if not return_time:
+			res = [i[1] for i in res]
+
+		if newest_first:
+			return list(reversed(res))
+		return res
+
+	# ==================== pretty print ==================== #
+
+	def print_history(self):
+		fmt = '|%13s | %40s | %20s|'
+		sep = ('-' * 13, '-' * 40, '-' * 20)
+		# header
+		print(fmt % sep)
+		print(fmt % ('Time', 'Tags', 'Values'))
+		print(fmt % sep)
+		# contents
+		for row in self._history:
+			row = tuple([str(i) for i in row])
+			print(fmt % row)
+
+	# ==================== Load & Save ==================== #
+
+	def save(self, path):
+		import cPickle
+		history = cPickle.dumps(self._history)
+		model = cPickle.dumps(self._model)
+
+		f = h5py.File(path, 'w')
+		f['history'] = history
+		f['model'] = model
+		for i, w in enumerate(self._weights):
+			f['weight_%d' % i] = w
+		f['nb_weights'] = len(self._weights)
+		f.close()
+
+	@staticmethod
+	def load(path):
+		import cPickle
+		m = Model()
+		f = h5py.File(path, 'r')
+		m._history = cPickle.loads(f['history'].value)
+		m._model = cPickle.loads(f['model'].value)
+		m._weights = []
+		for i in xrange(f['nb_weights'].value):
+			m._weights.append(f['weight_%d' % i].value)
+		f.close()
+		return m
+
 class EarlyStop(object):
 
 	""" Implemetation of earlystop based on voting from many different techniques
