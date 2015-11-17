@@ -65,7 +65,7 @@ deactivate
 	os.remove('tmp_train_gpu.slurm')
 	return slurm_text
 
-def gpu_theano(task_name, duration, delay, script, n_gpu=1, mem=15000):
+def gpu_theano(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
 	if not (isinstance(script[0], list) or isinstance(script[0], tuple)):
 		script = [script]
 	running_prefix = 'THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python '
@@ -78,7 +78,7 @@ def gpu_theano(task_name, duration, delay, script, n_gpu=1, mem=15000):
 	running_script = running_script[:-1]
 	create_slurm_gpu(task_name, duration, delay, running_script, n_gpu, mem)
 
-def gpu_python(task_name, duration, delay, script, n_gpu=1, mem=15000):
+def gpu_python(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
 	if not (isinstance(script[0], list) or isinstance(script[0], tuple)):
 		script = [script]
 	running_prefix = 'python '
@@ -142,6 +142,19 @@ deactivate
 	os.system('sbatch tmp_train_cpu.slurm')
 	os.remove('tmp_train_cpu.slurm')
 	return slurm_text
+
+def cpu_python(task_name, duration, script, delay=0, n_cpu=4, mem=12000):
+	if not (isinstance(script[0], list) or isinstance(script[0], tuple)):
+		script = [script]
+	running_prefix = 'python '
+	running_script = ''
+	for s in script:
+		running_script += running_prefix
+		running_script += s[0] + ' ' # path to script
+		running_script += ' '.join([str(p) for p in s[1:]])
+		running_script += ';'
+	running_script = running_script[:-1]
+	create_slurm_cpu(task_name, duration, delay, running_script, n_cpu, mem)
 
 # ======================================================================
 # model
