@@ -28,7 +28,7 @@ def create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
 	if hour == 0 and minute <= 15:
 		arch = 'gputest'
 
-	if not (isinstance(command[0], list) or isinstance(command[0], tuple)):
+	if isinstance(command, str) or not hasattr(command, '__len__'):
 		command = [command]
 	command = ';'.join(command)
 
@@ -67,7 +67,7 @@ deactivate
 	return slurm_text
 
 def gpu_theano(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
-	if not (isinstance(script[0], list) or isinstance(script[0], tuple)):
+	if isinstance(script, str) or not hasattr(script, '__len__'):
 		script = [script]
 	running_prefix = 'THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python '
 	running_script = ''
@@ -80,7 +80,7 @@ def gpu_theano(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
 	create_slurm_gpu(task_name, duration, delay, running_script, n_gpu, mem)
 
 def gpu_python(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
-	if not (isinstance(script[0], list) or isinstance(script[0], tuple)):
+	if isinstance(script, str) or not hasattr(script, '__len__'):
 		script = [script]
 	running_prefix = 'python '
 	running_script = ''
@@ -107,7 +107,7 @@ def create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000):
 	if mem > 16000:
 		machine_type = 'hugemem'
 
-	if not (isinstance(command[0], list) or isinstance(command[0], tuple)):
+	if isinstance(command, str) or not hasattr(command, '__len__'):
 		command = [command]
 	command = ';'.join(command)
 
@@ -146,7 +146,7 @@ deactivate
 	return slurm_text
 
 def cpu_python(task_name, duration, script, delay=0, n_cpu=4, mem=12000):
-	if not (isinstance(script[0], list) or isinstance(script[0], tuple)):
+	if isinstance(script, str) or not hasattr(script, '__len__'):
 		script = [script]
 	running_prefix = 'python '
 	running_script = ''
