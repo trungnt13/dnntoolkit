@@ -62,6 +62,7 @@ deactivate
 	f.write(slurm_text)
 	f.close()
 	os.system('sbatch tmp_train_gpu.slurm')
+	os.system('cat tmp_train_gpu.slurm')
 	os.remove('tmp_train_gpu.slurm')
 	return slurm_text
 
@@ -140,6 +141,7 @@ deactivate
 	f.write(slurm_text)
 	f.close()
 	os.system('sbatch tmp_train_cpu.slurm')
+	os.system('cat tmp_train_cpu.slurm')
 	os.remove('tmp_train_cpu.slurm')
 	return slurm_text
 
