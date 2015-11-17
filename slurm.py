@@ -73,8 +73,7 @@ def gpu_theano(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
 	running_script = ''
 	for s in script:
 		running_script += running_prefix
-		running_script += s[0] + ' ' # path to script
-		running_script += ' '.join([str(p) for p in s[1:]])
+		running_script += s # path to script
 		running_script += ';'
 	running_script = running_script[:-1]
 	create_slurm_gpu(task_name, duration, delay, running_script, n_gpu, mem)
@@ -86,8 +85,7 @@ def gpu_python(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
 	running_script = ''
 	for s in script:
 		running_script += running_prefix
-		running_script += s[0] + ' ' # path to script
-		running_script += ' '.join([str(p) for p in s[1:]])
+		running_script += s
 		running_script += ';'
 	running_script = running_script[:-1]
 	create_slurm_gpu(task_name, duration, delay, running_script, n_gpu, mem)
@@ -152,8 +150,7 @@ def cpu_python(task_name, duration, script, delay=0, n_cpu=4, mem=12000):
 	running_script = ''
 	for s in script:
 		running_script += running_prefix
-		running_script += s[0] + ' ' # path to script
-		running_script += ' '.join([str(p) for p in s[1:]])
+		running_script += s
 		running_script += ';'
 	running_script = running_script[:-1]
 	create_slurm_cpu(task_name, duration, delay, running_script, n_cpu, mem)
