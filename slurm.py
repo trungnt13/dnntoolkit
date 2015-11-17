@@ -40,8 +40,8 @@ def create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
 #SBATCH -t %02d:%02d:00
 #SBATCH --begin=now+%dminute
 #SBATCH -J %s
-#SBATCH -o log/%s
-#SBATCH -e log/%s
+#SBATCH -o %s
+#SBATCH -e %s
 #SBATCH --mem=%d
 #SBATCH --gres=gpu:%d
 #SBATCH --mail-type=BEGIN,FAIL,END # Type of email notification- BEGIN,END,FAIL,ALL
@@ -118,8 +118,8 @@ def create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000):
 #SBATCH -t %02d:%02d:00
 #SBATCH --begin=now+%dminute
 #SBATCH -J %s
-#SBATCH -o log/%s
-#SBATCH -e log/%s
+#SBATCH -o %s
+#SBATCH -e %s
 #SBATCH --constraint="snb|hsw"
 #SBATCH -p %s
 #SBATCH -n %d
