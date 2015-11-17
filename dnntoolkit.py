@@ -512,7 +512,27 @@ class _batch(object):
 		return self._data.value
 
 	# ==================== Arithmetic ==================== #
+	def sum2(self, axis=0):
+		''' sum(X^2) '''
+		s = 0
+		isInit = False
+		for X in self.iter(shuffle=False):
+			X = X.astype(np.float64)
+			if axis == 0:
+				# for more stable precision
+				s += np.sum(np.power(X, 2), 0)
+			else:
+				if not isInit:
+					s = [np.sum(np.power(X, 2), axis)]
+					isInit = True
+				else:
+					s.append(np.sum(np.power(X, 2), axis))
+		if isinstance(s, list):
+			s = np.concatenate(s, axis=0)
+		return s
+
 	def sum(self, axis=0):
+		''' sum(X) '''
 		s = 0
 		isInit = False
 		for X in self.iter(shuffle=False):
@@ -535,22 +555,27 @@ class _batch(object):
 		return s / self.shape[axis]
 
 	def var(self, axis=0):
-		v = 0
+		v2 = 0
+		v1 = 0
 		isInit = False
 		n = self.shape[axis]
 		for X in self.iter(shuffle=False):
 			X = X.astype(np.float64)
 			if axis == 0:
-				v += np.sum(np.power(X, 2), axis) - \
-                                    1 / n * np.power(np.sum(X, axis), 2)
+				v2 += np.sum(np.power(X, 2), axis)
+				v1 += np.sum(X, axis)
 			else:
 				if not isInit:
-					v = [np.sum(np.power(X, 2), axis) - 1 / n * np.power(np.sum(X, axis), 2)]
+					v2 = [np.sum(np.power(X, 2), axis)]
+					v1 = [np.sum(X, axis)]
 					isInit = True
 				else:
-					v.append(np.sum(np.power(X, 2), axis) - 1 / n * np.power(np.sum(X, axis), 2))
-		if isinstance(v, list):
-			v = np.concatenate(v, axis=0)
+					v2.append(np.sum(np.power(X, 2), axis))
+					v1.append(np.sum(X, axis))
+		if isinstance(v2, list):
+			v2 = np.concatenate(v2, axis=0)
+			v1 = np.concatenate(v1, axis=0)
+		v = v2 - 1 / n * np.power(v1, 2)
 		return v / n
 
 	# ==================== Safty first ==================== #
