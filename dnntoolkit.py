@@ -517,7 +517,6 @@ class Model(object):
 	# ====== early stop ====== #
 	def earlystop(self, tags, generalization_lost = False, generalization_sensitive=False, hope_hop=False):
 		values = self.select(tags)
-		print(values)
 		shouldSave = 0
 		shouldStop = 0
 		if generalization_lost:
@@ -1037,7 +1036,8 @@ class Logger():
 			fmt_str = "\r%s (%d/%d)[%s]"
 
 		max_bar = 24
-		bar = '=' * int(p / max * max_bar) + '>'
+		n_bar = int(p / max * max_bar)
+		bar = '=' * n_bar + '>' + ' ' * (max_bar - n_bar)
 		sys.stdout.write(fmt_str % (title, p, max, bar))
 		sys.stdout.flush()
 
