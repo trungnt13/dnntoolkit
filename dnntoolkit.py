@@ -1,4 +1,19 @@
 # coding=utf-8
+# Copyright 2015 Trung Ngo Trong
+
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at
+
+#   http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+# Credits: Richard Kurle
+
 # ======================================================================
 # Collection of utilities function in python for deep learning development
 # Library
@@ -25,7 +40,7 @@ import numpy as np
 import scipy as sp
 
 import theano
-from theano import tensor as T
+from theano import tensor
 
 import h5py
 
@@ -120,6 +135,81 @@ class io():
 		return file_list
 
 # ======================================================================
+# Array Utils
+# ======================================================================
+class T():
+
+	@staticmethod
+	def masked_output(X, X_mask):
+		'''
+		Example
+		-------
+			X: [[1,2,3,0,0],
+				[4,5,0,0,0]]
+			X_mask: [[1,2,3,0,0],
+					 [4,5,0,0,0]]
+			return: [[1,2,3],[4,5]]
+		'''
+		res = []
+		for x, mask in izip(X, X_mask):
+			x = x[np.nonzero(mask)]
+			res.append(x.tolist())
+		return res
+
+	@staticmethod
+	def to_categorical(y, nb_classes=None):
+	    '''Convert class vector (integers from 0 to nb_classes)
+	    to binary class matrix, for use with categorical_crossentropy
+	    '''
+	    y = np.asarray(y, dtype='int32')
+	    if not nb_classes:
+	        nb_classes = np.max(y) + 1
+	    Y = np.zeros((len(y), nb_classes))
+	    for i in range(len(y)):
+	        Y[i, y[i]] = 1.
+	    return Y
+
+	@staticmethod
+	def floatX(X):
+		return np.asarray(X, dtype=theano.config.floatX)
+
+	@staticmethod
+	def sharedX(X, dtype=theano.config.floatX, name=None):
+		return theano.shared(np.asarray(X, dtype=dtype), name=name)
+
+	@staticmethod
+	def shared_zeros(shape, dtype=theano.config.floatX, name=None):
+		return T.sharedX(np.zeros(shape), dtype=dtype, name=name)
+
+	@staticmethod
+	def shared_scalar(val=0., dtype=theano.config.floatX, name=None):
+		return theano.shared(np.cast[dtype](val))
+
+	@staticmethod
+	def shared_ones(shape, dtype=theano.config.floatX, name=None):
+		return T.sharedX(np.ones(shape), dtype=dtype, name=name)
+
+	@staticmethod
+	def alloc_zeros_matrix(*dims):
+		return T.alloc(np.cast[theano.config.floatX](0.), *dims)
+
+	@staticmethod
+	def ndim_tensor(ndim):
+	    if ndim == 1:
+	        return T.vector()
+	    elif ndim == 2:
+	        return T.matrix()
+	    elif ndim == 3:
+	        return T.tensor3()
+	    elif ndim == 4:
+	        return T.tensor4()
+	    return T.matrix()
+
+	@staticmethod
+	def on_gpu():
+		return theano.config.device[:3] == 'gpu'
+
+# ======================================================================
 # Computing hyper-parameters
 # ======================================================================
 # remember: NOT all GPU resources is only used for your task
@@ -137,33 +227,6 @@ class GPU():
 		'core': 4992
 	}
 
-def batch_size(data_shape, gpu_model=GPU.K40, performance=None, bandwidth=None, size=None):
-	if gpu_model is not None:
-		performance = gpu_model['performance']
-		bandwidth = gpu_model['bandwidth']
-		size = gpu_model['size']
-	elif performance is None or bandwidth is None or size is None:
-		raise Exception('You must specify all GPU parameters')
-
-	performance = 10**12 * performance * 4 # bytes/second
-	bandwidth = bandwidth * 10**9 # bytes
-	size = 0.01 * size * 10**9 # bytes
-	data_mem = np.prod(data_shape) * 4 # bytes
-
-	# point is: maximize computation time, reduce transfer, < 0.01 GPU mem
-	batch_cost = []
-	print('computation  -   transfer   -   capacity')
-	for i in xrange(1, 20):
-		batch_size = 2**i * np.prod(data_shape[1:]) * 4 # bytes
-		n_batch = data_mem / batch_size
-		print('%.10f - %.10f - %.10f' % (n_batch * (batch_size / performance), n_batch * (batch_size / bandwidth), (batch_size / size)))
-		cost = n_batch * \
-			((batch_size / performance) / (batch_size / bandwidth)) / \
-			(batch_size / size)
-		batch_cost.append(cost)
-	print(batch_cost)
-	return 2**(np.argmin(batch_cost) + 1)
-
 # ======================================================================
 # Early stopping
 # ======================================================================
@@ -178,6 +241,8 @@ class Model(object):
 		self._history = []
 		self._weights = []
 		self._model = ['abc' for i in xrange(10)]
+		self._api = 'lasagne'
+		self._save_path = None
 
 	# ==================== Model manager ==================== #
 	def set_weights(self, weights):
@@ -188,7 +253,20 @@ class Model(object):
 	def get_weights(self):
 		return self._weights
 
+	def save_model(model):
+		api = str(type(model)).lower()
+		if 'lasagne' in api:
+			api = 'lasagne'
+		elif 'keras' in api:
+			api = 'keras'
+		elif 'blocks' in api:
+			api = 'blocks'
+		raise NotImplementedError()
+
 	# ==================== History manager ==================== #
+	def clear(self):
+		self._history = []
+
 	def record(self, tags, values):
 		# in GMT
 		curr_time = int(round(time.time() * 1000)) # in ms
@@ -282,7 +360,12 @@ class Model(object):
 
 	# ==================== Load & Save ==================== #
 
-	def save(self, path):
+	def save(self, path=None):
+		if path is None and self._save_path is None:
+			raise ValueError("Save path haven't specified!")
+		path = path if path is not None else self._save_path
+		self._save_path = path
+
 		import cPickle
 		history = cPickle.dumps(self._history)
 		model = cPickle.dumps(self._model)
@@ -293,16 +376,24 @@ class Model(object):
 		for i, w in enumerate(self._weights):
 			f['weight_%d' % i] = w
 		f['nb_weights'] = len(self._weights)
+		f['api'] = self._api
 		f.close()
 
 	@staticmethod
 	def load(path):
+		if not os.path.exists(path):
+			m = Model()
+			m._save_path = path
+			return m
 		import cPickle
+
 		m = Model()
 		f = h5py.File(path, 'r')
 		m._history = cPickle.loads(f['history'].value)
 		m._model = cPickle.loads(f['model'].value)
+		m._api = f['api'].value
 		m._weights = []
+		m._save_path = path
 		for i in xrange(f['nb_weights'].value):
 			m._weights.append(f['weight_%d' % i].value)
 		f.close()
@@ -992,7 +1083,8 @@ class Speech():
 	@staticmethod
 	def logmel(signal, fs, n_filters=40, nfft=512, win=0.025, shift=0.01,
 			delta1=True, delta2=True, energy=True,
-			normalize=True, vad=True, clean=True):
+			normalize=True, clean=True,
+			 vad=True, returnVAD=False):
 		if len(signal.shape) > 1:
 			signal = signal.ravel()
 
@@ -1040,7 +1132,8 @@ class Speech():
 		# 5. VAD and normalize.
 		if vad:
 			idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
-			logmel = logmel[idx, :]
+			if not returnVAD:
+				logmel = logmel[idx, :]
 
 		# Normalize
 		if normalize:
@@ -1048,12 +1141,15 @@ class Speech():
 			var = np.var(logmel, axis = 0)
 			logmel = (logmel - mean) / np.sqrt(var)
 
+		if returnVAD and vad:
+			return logmel, idx
 		return logmel
 
 	@staticmethod
 	def mfcc(signal, fs, n_ceps, n_filters=40, nfft=512, win=0.025, shift=0.01,
 			delta1=True, delta2=True, energy=True,
-			normalize=True, vad=True, clean=True):
+			normalize=True, clean=True,
+			vad=True, returnVAD=False):
 		#####################################
 		# 1. Const.
 		f_min = 0. # The minimal frequency of the filter bank
@@ -1095,7 +1191,8 @@ class Speech():
 		# VAD
 		if vad:
 			idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
-			mfcc = mfcc[idx, :]
+			if not returnVAD:
+				mfcc = mfcc[idx, :]
 
 		# Normalize
 		if normalize:
@@ -1103,7 +1200,80 @@ class Speech():
 			var = np.var(mfcc, axis = 0)
 			mfcc = (mfcc - mean) / np.sqrt(var)
 
+		if returnVAD and vad:
+			return mfcc, idx
 		return mfcc
+
+	@staticmethod
+	def LevenshteinDistance(s1, s2):
+		''' Implementation of the wikipedia algorithm, optimized for memory
+		Reference: http://rosettacode.org/wiki/Levenshtein_distance#Python
+		'''
+		if len(s1) > len(s2):
+		    s1, s2 = s2, s1
+		distances = range(len(s1) + 1)
+		for index2, char2 in enumerate(s2):
+		    newDistances = [index2 + 1]
+		    for index1, char1 in enumerate(s1):
+		        if char1 == char2:
+		            newDistances.append(distances[index1])
+		        else:
+		            newDistances.append(1 + min((distances[index1],
+		                                         distances[index1 + 1],
+		                                         newDistances[-1])))
+		    distances = newDistances
+		return distances[-1]
+
+	@staticmethod
+	def LER(y_true, y_pred, return_mean=True):
+		''' This function calculates the Labelling Error Rate (PER) of the decoded
+		networks output sequence (out) and a target sequence (tar) with Levenshtein
+		distance and dynamic programming. This is the same algorithm as commonly used
+		for calculating the word error rate (WER), or phonemes error rate (PER).
+
+		Parameters
+		----------
+		y_true : ndarray (nb_samples, seq_labels)
+			true values of sequences
+		y_pred : ndarray (nb_samples, seq_labels)
+			prediction values of sequences
+
+		Returns
+		-------
+		return : float
+			Labelling error rate
+		'''
+		if not hasattr(y_true[0], '__len__') or isinstance(y_true[0], str):
+			y_true = [y_true]
+		if not hasattr(y_pred[0], '__len__') or isinstance(y_pred[0], str):
+			y_pred = [y_pred]
+
+		results = []
+		for ytrue, ypred in izip(y_true, y_pred):
+			results.append(Speech.LevenshteinDistance(ytrue, ypred) / len(ytrue))
+		if return_mean:
+			return np.mean(results)
+		return results
+
+	@staticmethod
+	def decodeMaxOut(y_pred, mask=None):
+		if mask is None:
+			mask = np.ones(y_pred.shape[:-1])
+		mask = mask.astype(np.int8)
+		blank = y_pred.shape[-1] - 1
+		r = []
+		y_pred = T.masked_output(y_pred, mask)
+		for y in y_pred:
+			y = np.argmax(y, -1).tolist()
+			# remove duplicate
+			tmp = [y[0]]
+			for i in y[1:]:
+				if i != tmp[-1]: tmp.append(i)
+			# remove blanks, some duplicate may happen again but it is real
+			tmp = [i for i in tmp if i != blank]
+
+			r.append(tmp)
+		return r
 
 # ======================================================================
 # Network
