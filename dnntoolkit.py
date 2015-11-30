@@ -228,8 +228,102 @@ class GPU():
 	}
 
 # ======================================================================
-# Early stopping
+# Model
 # ======================================================================
+def _create_comparator(t):
+	return lambda x: x == t
+
+def _is_tags_match(func, tags, absolute=False):
+	'''
+	Example
+	-------
+	>>> tags = [1, 2, 3]
+	>>> func = [lambda x: x == 1]
+	>>> func1 = [lambda x: x == 1, lambda x: x == 2, lambda x: x == 3]
+	>>> _is_tags_match(func, tags, absolute=False) # True
+	>>> _is_tags_match(func, tags, absolute=True) # False
+	>>> _is_tags_match(func1, tags, absolute=True) # True
+	'''
+	for f in func:
+		match = False
+		for t in tags:
+			match |= f(t)
+		if not match: return False
+	if absolute and len(func) != len(tags):
+		return False
+	return True
+
+def _check_gs(validation):
+	if len(validation) == 0:
+		return 0, 0
+	shouldStop = 0
+	shouldSave = 0
+
+	if validation[-1] > min(validation):
+		shouldStop = 1
+		shouldSave = -1
+	else:
+		shouldStop = -1
+		shouldSave = 1
+
+	return shouldSave, shouldStop
+
+def _check_gl(validation):
+	gl_exit_threshold = 3
+
+	if len(validation) == 0:
+		return 0, 0
+	shouldStop = 0
+	shouldSave = 0
+
+	gl_t = 100 * (validation[-1] / min(validation) - 1)
+	if gl_t == 0: # min = current_value
+		shouldSave = 1
+		shouldStop = -1
+	elif gl_t > gl_exit_threshold:
+		shouldStop = 1
+		shouldSave = -1
+
+	return shouldSave, shouldStop
+
+
+def _check_hope_and_hop(validation):
+	patience = 5
+	patience_increase = 0.5
+	improvement_threshold = 0.998
+	if len(validation) == 0:
+		return 0, 0
+	shouldStop = 0
+	shouldSave = 0
+
+	# one more iteration
+	i = len(validation)
+	if len(validation) == 1: # cold start
+		shouldSave = 1
+		shouldStop = -1
+	else: # warm up
+		last_best_validation = min(validation[:-1])
+		# significant improvement
+		if min(validation) < last_best_validation * improvement_threshold:
+			patience += i * patience_increase
+			shouldSave = 1
+			shouldStop = -1
+		# punish
+		else:
+			# the more increase the faster we running out of patience
+			rate = validation[-1] / last_best_validation
+			patience -= i * patience_increase * rate
+			# if still little bit better, just save it
+			if min(validation) < last_best_validation:
+				shouldSave = 1
+			else:
+				shouldSave = -1
+
+	if patience <= 0:
+		shouldStop = 1
+		shouldSave = -1
+	return shouldSave, shouldStop
+
 # TODO: Add implementation for loading the whole models
 class Model(object):
 
@@ -267,27 +361,82 @@ class Model(object):
 	def clear(self):
 		self._history = []
 
-	def record(self, tags, values):
+	def record(self, values, *tags):
 		# in GMT
 		curr_time = int(round(time.time() * 1000)) # in ms
+
+		if not isinstance(tags, list) and not isinstance(tags, tuple):
+			tags = [tags]
+		tags = set(tags)
 
 		# timestamp must never equal
 		if len(self._history) > 0 and self._history[-1][0] >= curr_time:
 			curr_time = self._history[-1][0] + 1
 
-		if not hasattr(tags, '__len__'):
-			tags = [tags]
 		self._history.append([curr_time, tags, values])
 
-	def select(self, tags, after=None, before=None, n=None, filter_value=None,
-		absolute=False, newest_first=False, return_time=False):
+	def update(self, tags, func, after=None, before=None, n=None, absolute=False):
+		''' Apply a funciton to all selected value
+
+		Parameters
+		----------
+		tags : list, str, filter function or any comparable object
+			get all values contain given tags
+		after, before : time constraint (in millisecond)
+			after < t < before
+		n : int
+			number of record will be update
+		filter_value : function
+			function to filter each value found
+		absolute : boolean
+			whether required the same set of tags or just contain
+
+		'''
+		# ====== preprocess arguments ====== #
+		history = self._history
+		if not isinstance(tags, list) and not isinstance(tags, tuple):
+			tags = [tags]
+		tags = set(tags)
+		tags = [t if hasattr(t, '__call__') else _create_comparator(t) for t in tags]
+
+		if len(history) == 0:
+			return []
+		if not hasattr(tags, '__len__'):
+			tags = [tags]
+		if after is None:
+			after = history[0][0]
+		if before is None:
+			before = history[-1][0]
+		if n is None or n < 0:
+			n = len(history)
+
+		# ====== searching ====== #
+		count = 0
+		for row in history:
+			if count > n:
+				break
+
+			# check time
+			time = row[0]
+			if time < after or time > before:
+				continue
+			# check tags
+			if not _is_tags_match(tags, row[1], absolute):
+				continue
+			# check value
+			row[2] = func(row[2])
+			count += 1
+
+	def select(self, tags, after=None, before=None, n=None,
+		filter_value=None, absolute=False,
+		newest_first=False, return_time=False):
 		''' Query in history
 
 		Parameters
 		----------
-		tags : list, str, object
+		tags : list, str, filter function or any comparable object
 			get all values contain given tags
-		after, before : time constraint
+		after, before : time constraint (in millisecond)
 			after < t < before
 		n : int
 			number of record return
@@ -295,6 +444,10 @@ class Model(object):
 			function to filter each value found
 		absolute : boolean
 			whether required the same set of tags or just contain
+		newest_first : boolean
+			returning order
+		return_time : boolean
+			whether return time tags
 
 		Returns
 		-------
@@ -303,11 +456,15 @@ class Model(object):
 		'''
 		# ====== preprocess arguments ====== #
 		history = self._history
+		if not isinstance(tags, list) and not isinstance(tags, tuple):
+			tags = [tags]
+		tags = set(tags)
+		tags = [t if hasattr(t, '__call__') else _create_comparator(t) for t in tags]
+
 		if len(history) == 0:
-			return None
+			return []
 		if not hasattr(tags, '__len__'):
 			tags = [tags]
-		if absolute: tags = set(tags)
 		if after is None:
 			after = history[0][0]
 		if before is None:
@@ -318,16 +475,15 @@ class Model(object):
 		# ====== searching ====== #
 		res = []
 		for row in history:
+			if len(res) > n:
+				break
+
 			# check time
 			time = row[0]
 			if time < after or time > before:
 				continue
 			# check tags
-			if not absolute:
-				tag = sum([t not in row[1] for t in tags])
-			else:
-				tag = not (tags == set(row[1]))
-			if tag > 0:
+			if not _is_tags_match(tags, row[1], absolute):
 				continue
 			# check value
 			val = row[2]
@@ -358,8 +514,27 @@ class Model(object):
 			row = tuple([str(i) for i in row])
 			print(fmt % row)
 
-	# ==================== Load & Save ==================== #
+	# ====== early stop ====== #
+	def earlystop(self, tags, generalization_lost = False, generalization_sensitive=False, hope_hop=False):
+		values = self.select(tags)
+		print(values)
+		shouldSave = 0
+		shouldStop = 0
+		if generalization_lost:
+			save, stop = _check_gl(values)
+			shouldSave += save
+			shouldStop += stop
+		if generalization_sensitive:
+			save, stop = _check_gs(values)
+			shouldSave += save
+			shouldStop += stop
+		if hope_hop:
+			save, stop = _check_hope_and_hop(values)
+			shouldSave += save
+			shouldStop += stop
+		return shouldSave > 0, shouldStop > 0
 
+	# ==================== Load & Save ==================== #
 	def save(self, path=None):
 		if path is None and self._save_path is None:
 			raise ValueError("Save path haven't specified!")
@@ -399,177 +574,6 @@ class Model(object):
 		f.close()
 		return m
 
-class EarlyStop(object):
-
-	""" Implemetation of earlystop based on voting from many different techniques
-	Example:
-		e = EarlyStop([train_loss, ...],[validation_lost, ...])
-		e.enable(generalization_loss=True/False, hope_hop=True/False)
-		shouldSave, shouldStop = e.update(train_lost,None)
-		shouldSave, shouldStop = e.update(None,validation_loss)
-		shouldSave, shouldStop = e.update(train_loss,validation_loss)
-
-		if shouldSave:
-			# save the model
-		if shouldStop:
-			# stop training
-	Reference:
-		Early Stopping but when. (1999). Early Stopping but when, 1–15.
-	"""
- 	__train = []
- 	__validation = []
- 	__methods = []
- 	__valid_iter = 0
- 	__train_iter = 0
-
-	def __init__(self, train_record=None, validation_record=None):
-		super(EarlyStop, self).__init__()
-		self.__methods.append(self.__update_hope_and_hop)
-		if isinstance(train_record, list):
-			self.__train = train_record[:]
-		if isinstance(validation_record, list):
-			self.__validation = validation_record[:]
-
-	def enable(self, generalization_loss = False, hope_hop = False):
-		self.__methods = []
-		if generalization_loss:
-			self.__methods.append(self.__update_gl)
-		if hope_hop:
-			self.__methods.append(self.__update_hope_and_hop)
-
-	def reset(self):
-		self.__train = []
-		self.__validation = []
-		self.__train_iter = 0
-		self.__valid_iter = 0
-		self.__methods.append(self.__update_hope_and_hop)
-
-	def update(self, train_loss, validation_loss):
-		'''
-		return: shouldSave, shouldStop
-		'''
-		#####################################
-		# 1. Update records.
-		isUpdateTrain = False
-		isUpdateValidation = False
-		if train_loss is not None:
-			if isinstance(train_loss, list):
-				self.__train += train_loss
-			else:
-				self.__train.append(train_loss)
-			isUpdateTrain = True
-			self.__train_iter += 1
-		if validation_loss is not None:
-			if isinstance(validation_loss, list):
-				self.__validation += validation_loss
-			else:
-				self.__validation.append(validation_loss)
-			isUpdateValidation = True
-			self.__valid_iter += 1
-
-		#####################################
-		# 2. start calculation.
-		result = []
-		for m in self.__methods:
-			result.append(m(isUpdateTrain, isUpdateValidation))
-		result = np.sum(result, 0)
-
-		return result[0] > 0, result[1] > 0
-
-	def debug(self):
-		s = '\n'
-		s += 'Train: ' + str(['%.2f' % i for i in self.__train]) + '\n'
-		s += 'Validation: ' + str(['%.2f' % i for i in self.__validation]) + '\n'
-		s += 'ValidIter:%d \n' % self.__valid_iter
-		s += 'TrainIter:%d \n' % self.__train_iter
-		s += '=========== Hope and hop ===========\n'
-		s += 'Patience:%.2f \n' % self.patience
-		s += 'Increase:%.2f \n' % self.patience_increase
-		if len(self.__validation) > 0:
-			s += 'Best:%.2f \n' % min(self.__validation)
-		s += '=========== Generalization Loss ===========\n'
-		s += 'Threshold:%.2f \n' % self.__gl_exit_threshold
-		if len(self.__validation) > 0:
-			s += 'GL:%.2f \n' % (100 * (self.__validation[-1] / min(self.__validation) - 1))
-		return s
-
-	# ==================== Generalization Sensitive ==================== #
-	def __update_gs(self, train_update, validation_update):
-		if len(self.__validation) == 0:
-			return 0, 0
-		shouldStop = 0
-		shouldSave = 0
-
-		if validation_update:
-			if self.__validation[-1] > min(self.__validation):
-				shouldStop = 1
-				shouldSave = -1
-			else:
-				shouldStop = -1
-				shouldSave = 1
-
-		return shouldSave, shouldStop
-
-	# ==================== Generalization Loss ==================== #
-	__gl_exit_threshold = 3
-
-	def __update_gl(self, train_update, validation_update):
-		if len(self.__validation) == 0:
-			return 0, 0
-		shouldStop = 0
-		shouldSave = 0
-
-		if validation_update:
-			gl_t = 100 * (self.__validation[-1] / min(self.__validation) - 1)
-			if gl_t == 0: # min = current_value
-				shouldSave = 1
-				shouldStop = -1
-			elif gl_t > self.__gl_exit_threshold:
-				shouldStop = 1
-				shouldSave = -1
-
-		return shouldSave, shouldStop
-
-	# ==================== Hope and hop ==================== #
-	# Not so strict rules
-	patience = 2
-	patience_increase = 0.5
- 	improvement_threshold = 0.998
-
-	def __update_hope_and_hop(self, train_update, validation_update):
-		if len(self.__validation) == 0:
-			return 0, 0
-		shouldStop = 0
-		shouldSave = 0
-
-		if validation_update:
-			# one more iteration
-			i = self.__valid_iter
-
-			if len(self.__validation) == 1: # cold start
-				shouldSave = 1
-				shouldStop = -1
-			else: # warm up
-				last_best_validation = min(self.__validation[:-1])
-				# significant improvement
-				if min(self.__validation) < last_best_validation * self.improvement_threshold:
-					self.patience += i * self.patience_increase
-					shouldSave = 1
-					shouldStop = -1
-				# punish
-				else:
-					# the more increase the faster we running out of patience
-					rate = self.__validation[-1] / last_best_validation
-					self.patience -= i * self.patience_increase * rate
-					# if still little bit better, just save it
-					if min(self.__validation) < last_best_validation:
-						shouldSave = 1
-
-		if self.patience <= 0:
-			shouldStop = 1
-			shouldSave = -1
-
-		return shouldSave, shouldStop
 
 # ======================================================================
 # Data Preprocessing
@@ -823,6 +827,13 @@ class Dataset(object):
 		self.normalizer = normalizer
 		self._seed = 12082518
 
+		self._start = 0
+		self._end = -1
+
+	def bound(self, start=0, end=-1):
+		self._start = start
+		self._end = end
+
 	# ==================== Arithmetic ==================== #
 	def all_dataset(self, fileter_func=None, path='/'):
 		res = []
@@ -843,6 +854,9 @@ class Dataset(object):
 		self._seed = int(time.time())
 
 	def create_batch(self, nb_samples, batch_size = None):
+		start = self._start
+		end = self._end
+
 		if batch_size is None:
 			batch_size = self.batch_size
 		block_size = 8 * batch_size # load big block, then yield smaller batches
@@ -941,7 +955,7 @@ class Visual():
 		return ax
 
 	@staticmethod
-	def hinton_print(arr, max_arr=None):
+	def print_hinton(arr, max_arr=None):
 		''' Print hinton diagrams in terminal for visualization of weights
 		Example:
 			W = np.random.rand(10,10)
@@ -972,7 +986,7 @@ class Visual():
 		return result
 
 	@staticmethod
-	def hinton_plot(matrix, max_weight=None, ax=None):
+	def plot_hinton(matrix, max_weight=None, ax=None):
 		'''
 		Hinton diagrams are useful for visualizing the values of a 2D array (e.g.
 		a weight matrix):
@@ -1009,8 +1023,26 @@ class Visual():
 		return ax
 
 class Logger():
+	chars = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
 
 	"""docstring for Logger"""
+	@staticmethod
+	def progress(p, max=1.0, title='Progress', bar='='):
+		if p < 0: p = 0.0
+		if p > max: p = max
+		fmt_str = "\r%s (%.2f/%.2f)[%s]"
+		if max > 100:
+			p = int(p)
+			max = int(max)
+			fmt_str = "\r%s (%d/%d)[%s]"
+
+		max_bar = 24
+		bar = '=' * int(p / max * max_bar) + '>'
+		sys.stdout.write(fmt_str % (title, p, max, bar))
+		sys.stdout.flush()
+
+		if p >= max:
+			sys.stdout.write("\n")
 
 	@staticmethod
 	def create_logger(logging_path, multiprocess=False):
