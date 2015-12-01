@@ -1039,31 +1039,31 @@ class Logger():
 	_last_time = -1
 	"""docstring for Logger"""
 	@staticmethod
-	def progress(p, max=1.0, title='Progress', bar='='):
+	def progress(p, max_val=1.0, title='Progress', bar='='):
 		# ====== Config ====== #
 		if p < 0: p = 0.0
-		if p > max: p = max
+		if p > max_val: p = max_val
 		fmt_str = "\r%s (%.2f/%.2f)[%s] - ETA:%.2fs ETD:%.2fs"
-		if max > 100:
+		if max_val > 100:
 			p = int(p)
-			max = int(max)
+			max_val = int(max_val)
 			fmt_str = "\r%s (%d/%d)[%s] - ETA:%.2fs ETD:%.2fs"
 
 		# ====== ETA: estimated time of arrival ====== #
 		if Logger._last_time < 0:
 			Logger._last_time = time.time()
-		eta = (max - p) / max(1e-13, abs(p - Logger._last_value)) * (time.time() - Logger._last_time)
+		eta = (max_val - p) / max(1e-13, abs(p - Logger._last_value)) * (time.time() - Logger._last_time)
 		etd = time.time() - Logger._last_time
 		Logger._last_value = p
 		Logger._last_time = time.time()
 		# ====== print ====== #
-		max_bar = 20
-		n_bar = int(p / max * max_bar)
-		bar = '=' * n_bar + '>' + ' ' * (max_bar - n_bar)
-		sys.stdout.write(fmt_str % (title, p, max, bar, eta, etd))
+		max_val_bar = 20
+		n_bar = int(p / max_val * max_val_bar)
+		bar = '=' * n_bar + '>' + ' ' * (max_val_bar - n_bar)
+		sys.stdout.write(fmt_str % (title, p, max_val, bar, eta, etd))
 		sys.stdout.flush()
 
-		if p >= max:
+		if p >= max_val:
 			sys.stdout.write("\n")
 
 	@staticmethod
