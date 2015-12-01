@@ -573,6 +573,13 @@ class Model(object):
 		f.close()
 		return m
 
+class Trainer(object):
+
+	"""docstring for Trainer"""
+
+	def __init__(self, arg):
+		super(Trainer, self).__init__()
+		self.arg = arg
 
 # ======================================================================
 # Data Preprocessing
@@ -1024,21 +1031,32 @@ class Visual():
 class Logger():
 	chars = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
 
+	_last_value = 0
+	_last_time = -1
 	"""docstring for Logger"""
 	@staticmethod
 	def progress(p, max=1.0, title='Progress', bar='='):
+		# ====== Config ====== #
 		if p < 0: p = 0.0
 		if p > max: p = max
-		fmt_str = "\r%s (%.2f/%.2f)[%s]"
+		fmt_str = "\r%s (%.2f/%.2f)[%s] - ETA:%.2fs ETD:%.2fs"
 		if max > 100:
 			p = int(p)
 			max = int(max)
-			fmt_str = "\r%s (%d/%d)[%s]"
+			fmt_str = "\r%s (%d/%d)[%s] - ETA:%.2fs ETD:%.2fs"
 
-		max_bar = 24
+		# ====== ETA: estimated time of arrival ====== #
+		if Logger._last_time < 0:
+			Logger._last_time = time.time()
+		eta = (max - p) / abs(p - Logger._last_value) * (time.time() - Logger._last_time)
+		etd = time.time() - Logger._last_time
+		Logger._last_value = p
+		Logger._last_time = time.time()
+		# ====== print ====== #
+		max_bar = 20
 		n_bar = int(p / max * max_bar)
 		bar = '=' * n_bar + '>' + ' ' * (max_bar - n_bar)
-		sys.stdout.write(fmt_str % (title, p, max, bar))
+		sys.stdout.write(fmt_str % (title, p, max, bar, eta, etd))
 		sys.stdout.flush()
 
 		if p >= max:
