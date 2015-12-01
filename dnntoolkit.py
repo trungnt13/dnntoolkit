@@ -523,6 +523,7 @@ class Model(object):
 	# ====== early stop ====== #
 	def earlystop(self, tags, generalization_lost = False, generalization_sensitive=False, hope_hop=False):
 		values = self.select(tags)
+		values = [np.mean(i) if hasattr(i, '__len__') else i for i in values]
 		shouldSave = 0
 		shouldStop = 0
 		if generalization_lost:
@@ -1039,7 +1040,7 @@ class Logger():
 	_last_time = -1
 	"""docstring for Logger"""
 	@staticmethod
-	def progress(p, max_val=1.0, title='Progress', bar='='):
+	def progress(p, max_val=1.0, title='Progress', bar='=', newline=False):
 		# ====== Config ====== #
 		if p < 0: p = 0.0
 		if p > max_val: p = max_val
@@ -1049,6 +1050,9 @@ class Logger():
 			max_val = int(max_val)
 			fmt_str = "\r%s (%d/%d)[%s] - ETA:%.2fs ETD:%.2fs"
 
+		if newline:
+			fmt_str = fmt_str[1:]
+			fmt_str += '\n'
 		# ====== ETA: estimated time of arrival ====== #
 		if Logger._last_time < 0:
 			Logger._last_time = time.time()
