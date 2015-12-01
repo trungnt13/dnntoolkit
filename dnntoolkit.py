@@ -347,15 +347,21 @@ class Model(object):
 	def get_weights(self):
 		return self._weights
 
-	def save_model(model):
+	def save_model(self, model):
+		'''
+		model: is a callable() without any arguments, return model when called
+		'''
+		import dill
 		api = str(type(model)).lower()
 		if 'lasagne' in api:
-			api = 'lasagne'
+			self._api = 'lasagne'
+			self._model = dill.dumps(model)
 		elif 'keras' in api:
-			api = 'keras'
+			self._api = 'keras'
+			raise NotImplementedError()
 		elif 'blocks' in api:
-			api = 'blocks'
-		raise NotImplementedError()
+			self._api = 'blocks'
+			raise NotImplementedError()
 
 	# ==================== History manager ==================== #
 	def clear(self):
@@ -541,12 +547,10 @@ class Model(object):
 		self._save_path = path
 
 		import cPickle
-		history = cPickle.dumps(self._history)
-		model = cPickle.dumps(self._model)
 
 		f = h5py.File(path, 'w')
-		f['history'] = history
-		f['model'] = model
+		f['history'] = cPickle.dumps(self._history)
+		f['model'] = self._model
 		for i, w in enumerate(self._weights):
 			f['weight_%d' % i] = w
 		f['nb_weights'] = len(self._weights)
@@ -1048,7 +1052,7 @@ class Logger():
 		# ====== ETA: estimated time of arrival ====== #
 		if Logger._last_time < 0:
 			Logger._last_time = time.time()
-		eta = (max - p) / abs(p - Logger._last_value) * (time.time() - Logger._last_time)
+		eta = (max - p) / max(1e-13, abs(p - Logger._last_value)) * (time.time() - Logger._last_time)
 		etd = time.time() - Logger._last_time
 		Logger._last_value = p
 		Logger._last_time = time.time()
