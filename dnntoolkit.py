@@ -334,9 +334,13 @@ class Model(object):
 		super(Model, self).__init__()
 		self._history = []
 		self._weights = []
-		self._model = ['abc' for i in xrange(10)]
-		self._api = 'lasagne'
 		self._save_path = None
+
+		self._model_func = ''
+		self._api = 'lasagne'
+		self._sandbox = ''
+
+		self._model = None
 
 	# ==================== Model manager ==================== #
 	def set_weights(self, weights):
@@ -347,21 +351,62 @@ class Model(object):
 	def get_weights(self):
 		return self._weights
 
-	def save_model(self, model):
+	def save_model(self, model, api):
 		'''
 		model: is a callable() without any arguments, return model when called
 		'''
-		import dill
-		api = str(type(model)).lower()
+		import marshal
+		import cPickle
+		primitive = (bool, int, float, str)
+		sandbox = {}
+
 		if 'lasagne' in api:
 			self._api = 'lasagne'
-			self._model = dill.dumps(model)
+			self._model_func = marshal.dumps(model.func_code)
+			for k, v in model.func_globals.items():
+				if isinstance(v, primitive):
+					sandbox[k] = v
 		elif 'keras' in api:
 			self._api = 'keras'
 			raise NotImplementedError()
 		elif 'blocks' in api:
 			self._api = 'blocks'
 			raise NotImplementedError()
+		#H5py not support binary string, cannot use marshal
+		self._sandbox = cPickle.dumps(sandbox)
+
+	def _init_model(self):
+		if self._model_func is None:
+			raise ValueError("You must save_model first")
+		if self._model is None:
+			import types
+			import marshal
+			import cPickle
+
+			code = marshal.loads(self._model_func)
+			sandbox = cPickle.loads(self._sandbox)
+			globals()[self._api] = __import__(self._api)
+			for k, v in sandbox.iteritems():
+				globals()[k] = v
+
+			func = types.FunctionType(code, globals(), "create_model")
+			self._model = func()
+
+			if self._api == 'lasagne':
+				import lasagne
+				layers = lasagne.layers.get_all_layers(self._model)
+				i = [l.input_var for l in layers if isinstance(l, lasagne.layers.InputLayer)]
+				self._pred = theano.function(
+                                    inputs=i,
+                                    outputs=lasagne.layers.get_output(self._model),
+                                    allow_input_downcast=True,
+                                    on_unused_input=None)
+			else:
+				raise NotImplementedError()
+
+	def pred(self, *X):
+		self._init_model()
+		return self._pred(*X)
 
 	# ==================== History manager ==================== #
 	def clear(self):
@@ -548,14 +593,19 @@ class Model(object):
 		self._save_path = path
 
 		import cPickle
+		from array import array
 
 		f = h5py.File(path, 'w')
 		f['history'] = cPickle.dumps(self._history)
-		f['model'] = self._model
+
+		b = array("B", self._model_func)
+		f['model_func'] = cPickle.dumps(b)
+		f['api'] = self._api
+		f['sandbox'] = self._sandbox
+
 		for i, w in enumerate(self._weights):
 			f['weight_%d' % i] = w
 		f['nb_weights'] = len(self._weights)
-		f['api'] = self._api
 		f.close()
 
 	@staticmethod
@@ -567,14 +617,20 @@ class Model(object):
 		import cPickle
 
 		m = Model()
+		m._save_path = path
+
 		f = h5py.File(path, 'r')
 		m._history = cPickle.loads(f['history'].value)
-		m._model = cPickle.loads(f['model'].value)
+
+		b = cPickle.loads(f['model_func'].value)
+		m._model_func = b.tostring()
 		m._api = f['api'].value
+		m._sandbox = f['sandbox'].value
+
 		m._weights = []
-		m._save_path = path
 		for i in xrange(f['nb_weights'].value):
 			m._weights.append(f['weight_%d' % i].value)
+
 		f.close()
 		return m
 
