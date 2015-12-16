@@ -49,7 +49,7 @@ def create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
 #SBATCH
 
 source $HOME/a7dea06c655dcec82784/modules
-source $HOME/.env/ai/bin/activate
+source activate ai
 
 # run your script
 %s
@@ -127,7 +127,7 @@ def create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000):
 #SBATCH --mail-user=anonymouswork90@gmail.com
 
 source $HOME/a7dea06c655dcec82784/modules
-source $HOME/.env/ai/bin/activate
+source activate ai
 
 # run your script
 %s
