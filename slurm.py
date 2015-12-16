@@ -54,7 +54,7 @@ source activate ai
 # run your script
 %s
 
-deactivate
+source deactivate
 """
 	# SBATCH --exclusive
 	slurm_text = slurm_text % (arch, hour, minute, delay, task_name, log_path, log_path, mem, n_gpu, command)
@@ -132,7 +132,7 @@ source activate ai
 # run your script
 %s
 
-deactivate
+source deactivate
 """
 	slurm_text = slurm_text % (hour, minute, delay, task_name, log_path, log_path, machine_type, nb_core, mem, command)
 	f = open('tmp_train_cpu.slurm', 'w')
