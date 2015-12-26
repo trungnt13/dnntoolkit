@@ -46,7 +46,6 @@ import h5py
 
 import pandas as pd
 
-import sidekit
 import soundfile
 
 import paramiko
@@ -138,6 +137,58 @@ class io():
 # Array Utils
 # ======================================================================
 class T():
+
+	@staticmethod
+	def pad_sequences(sequences, maxlen=None, dtype='int32',
+						padding='pre', truncating='pre', value=0.):
+	    """
+		Pad each sequence to the same length:
+		the length of the longest sequence.
+
+		If maxlen is provided, any sequence longer than maxlen is truncated
+		to maxlen. Truncation happens off either the beginning (default) or
+		the end of the sequence.
+
+		Supports post-padding and pre-padding (default).
+
+		Parameters:
+		-----------
+			sequences: list of lists where each element is a sequence
+			maxlen: int, maximum length
+			dtype: type to cast the resulting sequence.
+			padding: 'pre' or 'post', pad either before or after each sequence.
+			truncating: 'pre' or 'post', remove values from sequences larger than
+			    maxlen either in the beginning or in the end of the sequence
+			value: float, value to pad the sequences to the desired value.
+
+		Returns:
+		x: numpy array with dimensions (number_of_sequences, maxlen)
+
+	    """
+	    lengths = [len(s) for s in sequences]
+
+	    nb_samples = len(sequences)
+	    if maxlen is None:
+	        maxlen = np.max(lengths)
+
+	    x = (np.ones((nb_samples, maxlen)) * value).astype(dtype)
+	    for idx, s in enumerate(sequences):
+	        if len(s) == 0:
+	            continue # empty list was found
+	        if truncating == 'pre':
+	            trunc = s[-maxlen:]
+	        elif truncating == 'post':
+	            trunc = s[:maxlen]
+	        else:
+	            raise ValueError("Truncating type '%s' not understood" % padding)
+
+	        if padding == 'post':
+	            x[idx, :len(trunc)] = trunc
+	        elif padding == 'pre':
+	            x[idx, -len(trunc):] = trunc
+	        else:
+	            raise ValueError("Padding type '%s' not understood" % padding)
+	    return x
 
 	@staticmethod
 	def masked_output(X, X_mask):
@@ -1156,167 +1207,171 @@ class Logger():
 # ======================================================================
 class Speech():
 
-	"""docstring for Speech"""
+    """docstring for Speech"""
 
-	def __init__(self):
-		super(Speech, self).__init__()
+    def __init__(self):
+    	super(Speech, self).__init__()
 
-	@staticmethod
-	def read(f, pcm = False):
-		'''
-		Return
-		------
-			waveform (ndarray), sample rate (int)
-		'''
-		if pcm or (isinstance(f, str) and 'pcm' in f):
-			return np.memmap(f, dtype=np.int16, mode='r')
-		return soundfile.read(f)
+    @staticmethod
+    def read(f, pcm = False):
+        '''
+        Return
+        ------
+        	waveform (ndarray), sample rate (int)
+        '''
+        if pcm or (isinstance(f, str) and 'pcm' in f):
+        	return np.memmap(f, dtype=np.int16, mode='r')
+        return soundfile.read(f)
 
-	@staticmethod
-	def preprocess(signal, add_noise=False):
-		if len(signal.shape) > 1:
-			signal = signal.ravel()
+    @staticmethod
+    def preprocess(signal, add_noise=False):
+        if len(signal.shape) > 1:
+            signal = signal.ravel()
 
-		signal = signal[signal != 0]
-		signal = signal.astype(np.float32)
-		if add_noise:
-			signal = signal + 1e-13 * np.random.randn(signal.shape)
-		return signal
+        signal = signal[signal != 0]
+        signal = signal.astype(np.float32)
+        if add_noise:
+        	signal = signal + 1e-13 * np.random.randn(signal.shape)
+        return signal
 
-	@staticmethod
-	def timit_phonemes(p, map39=False):
-		''' Mapping from 61 classes to 39 classes '''
-		phonemes = ['aa', 'ae', 'ah', 'ao', 'aw', 'ax', 'ax-h', 'axr', 'ay',
-			'b', 'bcl', 'ch', 'd', 'dcl', 'dh', 'dx', 'eh', 'el', 'em', 'en', 'eng',
-			'epi', 'er', 'ey', 'f', 'g', 'gcl', 'h#', 'hh', 'hv', 'ih', 'ix', 'iy',
-			'jh', 'k', 'kcl', 'l', 'm', 'n', 'ng', 'nx', 'ow', 'oy', 'p', 'pau',
-			'pcl', 'q', 'r', 's', 'sh', 't', 'tcl', 'th', 'uh', 'uw', 'ux', 'v',
-			'w', 'y', 'z', 'zh']
-		return phonemes.index(p)
+    @staticmethod
+    def timit_phonemes(p, map39=False):
+        ''' Mapping from 61 classes to 39 classes '''
+        phonemes = ['aa', 'ae', 'ah', 'ao', 'aw', 'ax', 'ax-h', 'axr', 'ay',
+        	'b', 'bcl', 'ch', 'd', 'dcl', 'dh', 'dx', 'eh', 'el', 'em', 'en', 'eng',
+        	'epi', 'er', 'ey', 'f', 'g', 'gcl', 'h#', 'hh', 'hv', 'ih', 'ix', 'iy',
+        	'jh', 'k', 'kcl', 'l', 'm', 'n', 'ng', 'nx', 'ow', 'oy', 'p', 'pau',
+        	'pcl', 'q', 'r', 's', 'sh', 't', 'tcl', 'th', 'uh', 'uw', 'ux', 'v',
+        	'w', 'y', 'z', 'zh']
+        return phonemes.index(p)
 
-	@staticmethod
-	def logmel(signal, fs, n_filters=40, nfft=512, win=0.025, shift=0.01,
-			delta1=True, delta2=True, energy=True,
-			normalize=True, clean=True,
-			 vad=True, returnVAD=False):
-		if len(signal.shape) > 1:
-			signal = signal.ravel()
+    @staticmethod
+    def logmel(signal, fs, n_filters=40, nfft=512, win=0.025, shift=0.01,
+    		delta1=True, delta2=True, energy=True,
+    		normalize=True, clean=True,
+    		 vad=True, returnVAD=False):
+        import sidekit
 
-		#####################################
-		# 1. Some const.
-		# n_filters = 40 # The number of mel filter bands
-		n_ceps = 13 # The number of cepstral coefficients
-		f_min = 0. # The minimal frequency of the filter bank
-		f_max = fs / 2
-		nwin = fs * win
-		# overlap = nwin - int(shift * fs)
+        if len(signal.shape) > 1:
+            signal = signal.ravel()
 
-		#####################################
-		# 2. preprocess.
-		if clean:
-			signal = Speech.preprocess(signal)
+        #####################################
+        # 1. Some const.
+        # n_filters = 40 # The number of mel filter bands
+        n_ceps = 13 # The number of cepstral coefficients
+        f_min = 0. # The minimal frequency of the filter bank
+        f_max = fs / 2
+        nwin = fs * win
+        # overlap = nwin - int(shift * fs)
 
-		#####################################
-		# 3. logmel.
-		logmel = sidekit.frontend.features.mfcc(signal,
-						lowfreq=f_min, maxfreq=f_max,
-						nlinfilt=0, nlogfilt=n_filters, nfft=nfft,
-						fs=fs, nceps=n_ceps, midfreq=1000,
-						nwin=nwin, shift=shift,
-						get_spec=False, get_mspec=True)
-		logenergy = logmel[1]
-		logmel = logmel[3]
-		# TODO: check how to calculate energy delta
-		if energy:
-			logmel = np.concatenate((logmel, logenergy.reshape(-1, 1)), axis=1)
+        #####################################
+        # 2. preprocess.
+        if clean:
+        	signal = Speech.preprocess(signal)
 
-		#####################################
-		# 4. delta.
-		tmp = [logmel]
-		if delta1 or delta2:
-			d1 = sidekit.frontend.features.compute_delta(logmel,
-							win=3, method='filter')
-			d2 = sidekit.frontend.features.compute_delta(delta1,
-							win=3, method='filter')
-			if delta1: tmp.append(d1)
-			if delta2: tmp.append(d2)
-		logmel = np.concatenate(tmp, 1)
+        #####################################
+        # 3. logmel.
+        logmel = sidekit.frontend.features.mfcc(signal,
+        				lowfreq=f_min, maxfreq=f_max,
+        				nlinfilt=0, nlogfilt=n_filters, nfft=nfft,
+        				fs=fs, nceps=n_ceps, midfreq=1000,
+        				nwin=nwin, shift=shift,
+        				get_spec=False, get_mspec=True)
+        logenergy = logmel[1]
+        logmel = logmel[3]
+        # TODO: check how to calculate energy delta
+        if energy:
+        	logmel = np.concatenate((logmel, logenergy.reshape(-1, 1)), axis=1)
 
-		#####################################
-		# 5. VAD and normalize.
-		if vad:
-			idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
-			if not returnVAD:
-				logmel = logmel[idx, :]
+        #####################################
+        # 4. delta.
+        tmp = [logmel]
+        if delta1 or delta2:
+        	d1 = sidekit.frontend.features.compute_delta(logmel,
+        					win=3, method='filter')
+        	d2 = sidekit.frontend.features.compute_delta(delta1,
+        					win=3, method='filter')
+        	if delta1: tmp.append(d1)
+        	if delta2: tmp.append(d2)
+        logmel = np.concatenate(tmp, 1)
 
-		# Normalize
-		if normalize:
-			mean = np.mean(logmel, axis = 0)
-			var = np.var(logmel, axis = 0)
-			logmel = (logmel - mean) / np.sqrt(var)
+        #####################################
+        # 5. VAD and normalize.
+        if vad:
+        	idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
+        	if not returnVAD:
+        		logmel = logmel[idx, :]
 
-		if returnVAD and vad:
-			return logmel, idx
-		return logmel
+        # Normalize
+        if normalize:
+        	mean = np.mean(logmel, axis = 0)
+        	var = np.var(logmel, axis = 0)
+        	logmel = (logmel - mean) / np.sqrt(var)
 
-	@staticmethod
-	def mfcc(signal, fs, n_ceps, n_filters=40, nfft=512, win=0.025, shift=0.01,
+        if returnVAD and vad:
+        	return logmel, idx
+        return logmel
+
+    @staticmethod
+    def mfcc(signal, fs, n_ceps, n_filters=40, nfft=512, win=0.025, shift=0.01,
 			delta1=True, delta2=True, energy=True,
 			normalize=True, clean=True,
 			vad=True, returnVAD=False):
-		#####################################
-		# 1. Const.
-		f_min = 0. # The minimal frequency of the filter bank
-		f_max = fs / 2
-		nwin = fs * win
+        import sidekit
 
-		#####################################
-		# 2. Speech.
-		if clean:
-			signal = Speech.preprocess(signal)
+        #####################################
+        # 1. Const.
+        f_min = 0. # The minimal frequency of the filter bank
+        f_max = fs / 2
+        nwin = fs * win
 
-		#####################################
-		# 3. mfcc.
-		# MFCC
-		mfcc = sidekit.frontend.features.mfcc(signal,
-						lowfreq=f_min, maxfreq=f_max,
-						nlinfilt=0, nlogfilt=n_filters, nfft=nfft,
-						fs=fs, nceps=n_ceps, midfreq=1000,
-						nwin=nwin, shift=shift,
-						get_spec=False, get_mspec=False)
-		logenergy = mfcc[1]
-		mfcc = mfcc[0]
+        #####################################
+        # 2. Speech.
+        if clean:
+        	signal = Speech.preprocess(signal)
 
-		if energy:
-			mfcc = np.concatenate((mfcc, logenergy.reshape(-1, 1)), axis=1)
-		#####################################
-		# 4. Add more information.
-		tmp = [mfcc]
-		if delta1 or delta2:
-			d1 = sidekit.frontend.features.compute_delta(mfcc,
-							win=3, method='filter')
-			d2 = sidekit.frontend.features.compute_delta(d1,
-							win=3, method='filter')
-			if delta1: tmp.append(d1)
-			if delta2: tmp.append(d2)
-		mfcc = np.concatenate(tmp, 1)
-		#####################################
-		# 5. Vad and normalize.
-		# VAD
-		if vad:
-			idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
-			if not returnVAD:
-				mfcc = mfcc[idx, :]
+        #####################################
+        # 3. mfcc.
+        # MFCC
+        mfcc = sidekit.frontend.features.mfcc(signal,
+        				lowfreq=f_min, maxfreq=f_max,
+        				nlinfilt=0, nlogfilt=n_filters, nfft=nfft,
+        				fs=fs, nceps=n_ceps, midfreq=1000,
+        				nwin=nwin, shift=shift,
+        				get_spec=False, get_mspec=False)
+        logenergy = mfcc[1]
+        mfcc = mfcc[0]
 
-		# Normalize
-		if normalize:
-			mean = np.mean(mfcc, axis = 0)
-			var = np.var(mfcc, axis = 0)
-			mfcc = (mfcc - mean) / np.sqrt(var)
+        if energy:
+        	mfcc = np.concatenate((mfcc, logenergy.reshape(-1, 1)), axis=1)
+        #####################################
+        # 4. Add more information.
+        tmp = [mfcc]
+        if delta1 or delta2:
+        	d1 = sidekit.frontend.features.compute_delta(mfcc,
+        					win=3, method='filter')
+        	d2 = sidekit.frontend.features.compute_delta(d1,
+        					win=3, method='filter')
+        	if delta1: tmp.append(d1)
+        	if delta2: tmp.append(d2)
+        mfcc = np.concatenate(tmp, 1)
+        #####################################
+        # 5. Vad and normalize.
+        # VAD
+        if vad:
+            idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
+            if not returnVAD:
+                mfcc = mfcc[idx, :]
 
-		if returnVAD and vad:
-			return mfcc, idx
-		return mfcc
+        # Normalize
+        if normalize:
+        	mean = np.mean(mfcc, axis = 0)
+        	var = np.var(mfcc, axis = 0)
+        	mfcc = (mfcc - mean) / np.sqrt(var)
+
+        if returnVAD and vad:
+        	return mfcc, idx
+        return mfcc
 
 	@staticmethod
 	def LevenshteinDistance(s1, s2):
