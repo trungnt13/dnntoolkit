@@ -1304,9 +1304,10 @@ class Speech():
 
         # Normalize
         if normalize:
-        	mean = np.mean(logmel, axis = 0)
-        	var = np.var(logmel, axis = 0)
-        	logmel = (logmel - mean) / np.sqrt(var)
+            logmel = logmel.astype(np.float32)
+            mean = np.mean(logmel, axis = 0)
+            var = np.var(logmel, axis = 0)
+            logmel = (logmel - mean) / np.sqrt(var)
 
         if returnVAD and vad:
         	return logmel, idx
@@ -1366,9 +1367,10 @@ class Speech():
 
         # Normalize
         if normalize:
-        	mean = np.mean(mfcc, axis = 0)
-        	var = np.var(mfcc, axis = 0)
-        	mfcc = (mfcc - mean) / np.sqrt(var)
+            mfcc = mfcc.astype(np.float32)
+            mean = np.mean(mfcc, axis = 0)
+            var = np.var(mfcc, axis = 0)
+            mfcc = (mfcc - mean) / np.sqrt(var)
 
         if returnVAD and vad:
         	return mfcc, idx
