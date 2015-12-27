@@ -49,7 +49,7 @@ _CPU_SLURM = \
 #SBATCH -J %s
 #SBATCH -o %s
 #SBATCH -e %s
-#SBATCH --constraint="snb|hsw"
+#SBATCH --constraint="hsw"
 #SBATCH -p %s
 #SBATCH --ntasks %d
 #SBATCH --mem-per-cpu=%d
@@ -265,4 +265,4 @@ if __name__ == '__main__':
 # python runner.py -t 2b52010attr  -d 4320 -m 15000 -f model_runner.py m2b 5_20_10_attr_set01 train.yaml
 
 # salloc --nodes=1 --ntasks=10 --mem-per-cpu=1000 -t 00:15:00 -p serial srun mpirun -n 10 python2.7-mpi demo1.py
-# salloc --nodes=1 --gres=gpu:2 --ntasks=2 --mem-per-cpu=8000 -t 00:15:00 -p gpu srun mpirun -n 2 python2.7-mpi demo1.py
+# salloc --nodes=1 --gres=gpu:2 -t 00:15:00 -p gpu srun mpirun -n 2 python2.7-mpi demo1.py
