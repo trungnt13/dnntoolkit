@@ -41,7 +41,7 @@ source deactivate
 _CPU_SLURM = \
 """#!/bin/bash
 # author: trungnt
-#SBATCH -N 1
+#SBATCH -N %d
 #SBATCH -t %02d:%02d:00
 #SBATCH --begin=now+%dminute
 #SBATCH -J %s
@@ -125,8 +125,13 @@ def gpu(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
 
 def _create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000):
     '''
-    THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python $HOME/appl_taito/src/nist_lre15/models1.py model3 set03
+    parallel    : 16-672 cores /  5mins/3days
+    serial      : 1-24 cores   /  5mins/3days
+    longrun     : 1-24 cores   /  5mins/14days
+    test        : 1-32 cores   /  5mins/30mins
+    hugemem     : 1-32 cores   /  5mins/7days
     '''
+    n_node = 1
     hour = int(math.floor(duration / 60))
     minute = duration - hour * 60
     log_path = task_name + '.out'
@@ -138,11 +143,17 @@ def _create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000)
     if mem > 16000:
         machine_type = 'hugemem'
 
+    # ====== calculate number of node ====== #
+    n_node = math.ceil(nb_core / 24)
+    if mem > 2500:
+        n_node = max(n_node, math.ceil(mem / 2500))
+
+    # ====== Join multiple command ====== #
     if isinstance(command, str) or not hasattr(command, '__len__'):
         command = [command]
     command = ';'.join(command)
 
-    slurm_text = _CPU_SLURM % (hour, minute, delay, task_name, log_path, log_path, machine_type, nb_core, mem, command)
+    slurm_text = _CPU_SLURM % (n_node, hour, minute, delay, task_name, log_path, log_path, machine_type, nb_core, mem, command)
     f = open('tmp_train_cpu.slurm', 'w')
     f.write(slurm_text)
     f.close()
