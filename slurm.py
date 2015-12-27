@@ -13,7 +13,7 @@ import math
 # ======================================================================
 # COnst
 # ======================================================================
-GPU_SLURM = \
+_GPU_SLURM = \
 """#!/bin/bash
 # author: trungnt
 #SBATCH -N 1
@@ -38,7 +38,7 @@ source activate ai
 source deactivate
 """
 
-CPU_SLURM = \
+_CPU_SLURM = \
 """#!/bin/bash
 # author: trungnt
 #SBATCH -N 1
@@ -66,7 +66,7 @@ source deactivate
 # ======================================================================
 # SLURM creator
 # ======================================================================
-def create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
+def _create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
     '''
     THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python $HOME/appl_taito/src/nist_lre15/models1.py model3 set03
     script = [[path, params ...], [path, params ...]]
@@ -86,7 +86,7 @@ def create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
     command = ';'.join(command)
 
     # SBATCH --exclusive
-    slurm_text = slurm_text % (arch, hour, minute, delay, task_name, log_path, log_path, mem, n_gpu, command)
+    slurm_text = _GPU_SLURM % (arch, hour, minute, delay, task_name, log_path, log_path, mem, n_gpu, command)
     f = open('tmp_train_gpu.slurm', 'w')
     f.write(slurm_text)
     f.close()
@@ -105,21 +105,19 @@ def gpu_theano(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
         running_script += s # path to script
         running_script += ';'
     running_script = running_script[:-1]
-    create_slurm_gpu(task_name, duration, delay, running_script, n_gpu, mem)
+    _create_slurm_gpu(task_name, duration, delay, running_script, n_gpu, mem)
 
-def gpu_python(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
+def gpu(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
     if isinstance(script, str) or not hasattr(script, '__len__'):
         script = [script]
-    running_prefix = 'python '
     running_script = ''
     for s in script:
-        running_script += running_prefix
         running_script += s
         running_script += ';'
     running_script = running_script[:-1]
-    create_slurm_gpu(task_name, duration, delay, running_script, n_gpu, mem)
+    _create_slurm_gpu(task_name, duration, delay, running_script, n_gpu, mem)
 
-def create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000):
+def _create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000):
     '''
     THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python $HOME/appl_taito/src/nist_lre15/models1.py model3 set03
     '''
@@ -138,7 +136,7 @@ def create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000):
         command = [command]
     command = ';'.join(command)
 
-    slurm_text = slurm_text % (hour, minute, delay, task_name, log_path, log_path, machine_type, nb_core, mem, command)
+    slurm_text = _CPU_SLURM % (hour, minute, delay, task_name, log_path, log_path, machine_type, nb_core, mem, command)
     f = open('tmp_train_cpu.slurm', 'w')
     f.write(slurm_text)
     f.close()
@@ -147,17 +145,15 @@ def create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000):
     os.remove('tmp_train_cpu.slurm')
     return slurm_text
 
-def cpu_python(task_name, duration, script, delay=0, n_cpu=4, mem=12000):
+def cpu(task_name, duration, script, delay=0, n_cpu=4, mem=12000):
     if isinstance(script, str) or not hasattr(script, '__len__'):
         script = [script]
-    running_prefix = 'python '
     running_script = ''
     for s in script:
-        running_script += running_prefix
         running_script += s
         running_script += ';'
     running_script = running_script[:-1]
-    create_slurm_cpu(task_name, duration, delay, running_script, n_cpu, mem)
+    _create_slurm_cpu(task_name, duration, delay, running_script, n_cpu, mem)
 
 # ======================================================================
 # model
@@ -205,10 +201,10 @@ if __name__ == '__main__':
         results = parser.parse_args()
 
         if results.p == 'gpu':
-            s = create_slurm_gpu(results.t, results.d, results.w, results.f, results.np, results.m)
+            s = _create_slurm_gpu(results.t, results.d, results.w, results.f, results.np, results.m)
             print(s)
         elif results.p == 'cpu':
-            s = create_slurm_cpu(results.t, results.d, results.w, results.f, results.np, results.m)
+            s = _create_slurm_cpu(results.t, results.d, results.w, results.f, results.np, results.m)
             print(s)
         else:
             parser.print_help()
