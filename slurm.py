@@ -16,7 +16,7 @@ import math
 _GPU_SLURM = \
 """#!/bin/bash
 # author: trungnt
-#SBATCH -N 1
+#SBATCH --nodes 1
 #SBATCH -p %s
 #SBATCH -t %02d:%02d:00
 #SBATCH --begin=now+%dminute
@@ -41,7 +41,7 @@ source deactivate
 _CPU_SLURM = \
 """#!/bin/bash
 # author: trungnt
-#SBATCH -N %d
+#SBATCH --nodes %d
 #SBATCH -t %02d:%02d:00
 #SBATCH --begin=now+%dminute
 #SBATCH -J %s
@@ -49,7 +49,7 @@ _CPU_SLURM = \
 #SBATCH -e %s
 #SBATCH --constraint="snb|hsw"
 #SBATCH -p %s
-#SBATCH -n %d
+#SBATCH --ntasks %d
 #SBATCH --mem-per-cpu=%d
 #SBATCH --mail-type=BEGIN,FAIL,END
 #SBATCH --mail-user=anonymouswork90@gmail.com
