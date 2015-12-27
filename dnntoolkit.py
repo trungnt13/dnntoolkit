@@ -1278,9 +1278,6 @@ class Speech():
         				get_spec=False, get_mspec=True)
         logenergy = logmel[1]
         logmel = logmel[3]
-        # TODO: check how to calculate energy delta
-        if energy:
-        	logmel = np.concatenate((logmel, logenergy.reshape(-1, 1)), axis=1)
 
         #####################################
         # 4. delta.
@@ -1288,11 +1285,14 @@ class Speech():
         if delta1 or delta2:
         	d1 = sidekit.frontend.features.compute_delta(logmel,
         					win=3, method='filter')
-        	d2 = sidekit.frontend.features.compute_delta(delta1,
+        	d2 = sidekit.frontend.features.compute_delta(d1,
         					win=3, method='filter')
         	if delta1: tmp.append(d1)
         	if delta2: tmp.append(d2)
         logmel = np.concatenate(tmp, 1)
+
+        if energy:
+            logmel = np.concatenate((logmel, logenergy.reshape(-1, 1)), axis=1)
 
         #####################################
         # 5. VAD and normalize.
