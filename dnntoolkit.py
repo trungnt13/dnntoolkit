@@ -1261,7 +1261,6 @@ class Speech():
         # n_filters = 40 # The number of mel filter bands
         f_min = 0. # The minimal frequency of the filter bank
         f_max = fs / 2
-        nwin = int(fs * win)
         # overlap = nwin - int(shift * fs)
 
         #####################################
@@ -1275,7 +1274,7 @@ class Speech():
         				lowfreq=f_min, maxfreq=f_max,
         				nlinfilt=0, nlogfilt=n_filters,
         				fs=fs, nceps=n_ceps, midfreq=1000,
-        				nwin=nwin, shift=shift,
+        				nwin=win, shift=shift,
         				get_spec=False, get_mspec=True)
         logenergy = logmel[1]
         logmel = logmel[3]
@@ -1298,9 +1297,10 @@ class Speech():
         #####################################
         # 5. VAD and normalize.
         if vad:
-        	idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
-        	if not returnVAD:
-        		logmel = logmel[idx, :]
+            nwin = int(fs * win)
+            idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
+            if not returnVAD:
+                logmel = logmel[idx, :]
 
         # Normalize
         if normalize:
@@ -1324,7 +1324,6 @@ class Speech():
         # 1. Const.
         f_min = 0. # The minimal frequency of the filter bank
         f_max = fs / 2
-        nwin = int(fs * win)
 
         #####################################
         # 2. Speech.
@@ -1338,7 +1337,7 @@ class Speech():
         				lowfreq=f_min, maxfreq=f_max,
         				nlinfilt=0, nlogfilt=n_filters,
         				fs=fs, nceps=n_ceps, midfreq=1000,
-        				nwin=nwin, shift=shift,
+        				nwin=win, shift=shift,
         				get_spec=False, get_mspec=False)
         logenergy = mfcc[1]
         mfcc = mfcc[0]
@@ -1360,6 +1359,7 @@ class Speech():
         # 5. Vad and normalize.
         # VAD
         if vad:
+            nwin = int(fs * win)
             idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
             if not returnVAD:
                 mfcc = mfcc[idx, :]
