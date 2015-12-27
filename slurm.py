@@ -13,10 +13,12 @@ import math
 # ======================================================================
 # COnst
 # ======================================================================
+# #SBATCH --exclusive
+
 _GPU_SLURM = \
 """#!/bin/bash
 # author: trungnt
-#SBATCH --nodes 1
+#SBATCH --nodes %d
 #SBATCH -p %s
 #SBATCH -t %02d:%02d:00
 #SBATCH --begin=now+%dminute
@@ -77,22 +79,28 @@ def _create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
     THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python $HOME/appl_taito/src/nist_lre15/models1.py model3 set03
     script = [[path, params ...], [path, params ...]]
     '''
+    n_node = 1
     hour = int(math.floor(duration / 60))
     minute = duration - hour * 60
     log_path = task_name + '.out'
     task_name = task_name
     mem = int(mem)
 
+    # ====== Select partition ====== #
     arch = 'gpu'
     if hour == 0 and minute <= 15:
         arch = 'gputest'
 
+    # ====== Select number of node ====== #
+    n_node = math.ceil(n_gpu / 2)
+
+    # ====== Create multiple script ====== #
     if isinstance(command, str) or not hasattr(command, '__len__'):
         command = [command]
     command = ';'.join(command)
 
     # SBATCH --exclusive
-    slurm_text = _GPU_SLURM % (arch, hour, minute, delay, task_name, log_path, log_path, mem, n_gpu, command)
+    slurm_text = _GPU_SLURM % (n_node, arch, hour, minute, delay, task_name, log_path, log_path, mem, n_gpu, command)
     f = open('tmp_train_gpu.slurm', 'w')
     f.write(slurm_text)
     f.close()
@@ -101,7 +109,7 @@ def _create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
     os.remove('tmp_train_gpu.slurm')
     return slurm_text
 
-def gpu_theano(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
+def gpu_theano(task_name, duration, script, n_gpu=1, mem=15000, delay=0):
     if isinstance(script, str) or not hasattr(script, '__len__'):
         script = [script]
     running_prefix = 'THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python '
@@ -113,7 +121,7 @@ def gpu_theano(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
     running_script = running_script[:-1]
     _create_slurm_gpu(task_name, duration, delay, running_script, n_gpu, mem)
 
-def gpu(task_name, duration, script, delay=0, n_gpu=1, mem=15000):
+def gpu(task_name, duration, script, n_gpu=1, mem=15000, delay=0):
     if isinstance(script, str) or not hasattr(script, '__len__'):
         script = [script]
     running_script = ''
@@ -162,7 +170,7 @@ def _create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000)
     os.remove('tmp_train_cpu.slurm')
     return slurm_text
 
-def cpu(task_name, duration, script, delay=0, n_cpu=4, mem=12000):
+def cpu(task_name, duration, script, n_cpu=4, mem=12000, delay=0):
     if isinstance(script, str) or not hasattr(script, '__len__'):
         script = [script]
     running_script = ''
