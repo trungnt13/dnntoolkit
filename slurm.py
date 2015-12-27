@@ -92,7 +92,7 @@ def _create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
         arch = 'gputest'
 
     # ====== Select number of node ====== #
-    # n_node = math.ceil(n_gpu / 2)
+    n_node = math.ceil(n_gpu / 2)
 
     # ====== Create multiple script ====== #
     if isinstance(command, str) or not hasattr(command, '__len__'):
