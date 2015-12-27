@@ -54,7 +54,13 @@ _CPU_SLURM = \
 #SBATCH --mail-type=BEGIN,FAIL,END
 #SBATCH --mail-user=anonymouswork90@gmail.com
 
-source $HOME/a7dea06c655dcec82784/modules
+module purge
+module load gcc/4.9.1
+module load mkl/11.1.1
+module load openmpi/1.8.2
+module load git
+module load openblas
+
 source activate ai
 
 # run your script
