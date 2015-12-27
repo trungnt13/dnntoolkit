@@ -1246,10 +1246,10 @@ class Speech():
         return phonemes.index(p)
 
     @staticmethod
-    def logmel(signal, fs, n_filters=40, nfft=512, win=0.025, shift=0.01,
+    def logmel(signal, fs, n_filters=40, nfft=512, n_ceps=13,
+            win=0.025, shift=0.01,
     		delta1=True, delta2=True, energy=True,
-    		normalize=True, clean=True,
-    		 vad=True, returnVAD=False):
+    		normalize=True, clean=True, vad=True, returnVAD=False):
         import sidekit
 
         if len(signal.shape) > 1:
@@ -1258,7 +1258,6 @@ class Speech():
         #####################################
         # 1. Some const.
         # n_filters = 40 # The number of mel filter bands
-        n_ceps = 13 # The number of cepstral coefficients
         f_min = 0. # The minimal frequency of the filter bank
         f_max = fs / 2
         nwin = fs * win
