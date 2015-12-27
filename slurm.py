@@ -61,7 +61,7 @@ module load intelmpi/5.0.2
 module load git
 module load openblas
 
-source activate ai
+source activate ai-cpu
 
 # run your script
 %s
