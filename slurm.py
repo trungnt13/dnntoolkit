@@ -57,7 +57,7 @@ _CPU_SLURM = \
 module purge
 module load gcc/4.9.1
 module load mkl/11.1.1
-module load openmpi/1.8.2
+module load intelmpi/5.0.2
 module load git
 module load openblas
 
