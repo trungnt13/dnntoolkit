@@ -39,11 +39,8 @@ from collections import OrderedDict
 import numpy as np
 import scipy as sp
 
-try:
-    import theano
-    from theano import tensor
-except Exception, e:
-    pass
+import theano
+from theano import tensor
 
 import h5py
 
