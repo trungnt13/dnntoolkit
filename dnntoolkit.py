@@ -1246,7 +1246,7 @@ class Speech():
         return phonemes.index(p)
 
     @staticmethod
-    def logmel(signal, fs, n_filters=40, nfft=512, n_ceps=13,
+    def logmel(signal, fs, n_filters=40, n_ceps=13,
             win=0.025, shift=0.01,
     		delta1=True, delta2=True, energy=True,
     		normalize=True, clean=True, vad=True, returnVAD=False):
@@ -1272,7 +1272,7 @@ class Speech():
         # 3. logmel.
         logmel = sidekit.frontend.features.mfcc(signal,
         				lowfreq=f_min, maxfreq=f_max,
-        				nlinfilt=0, nlogfilt=n_filters, nfft=nfft,
+        				nlinfilt=0, nlogfilt=n_filters,
         				fs=fs, nceps=n_ceps, midfreq=1000,
         				nwin=nwin, shift=shift,
         				get_spec=False, get_mspec=True)
@@ -1312,7 +1312,8 @@ class Speech():
         return logmel
 
     @staticmethod
-    def mfcc(signal, fs, n_ceps, n_filters=40, nfft=512, win=0.025, shift=0.01,
+    def mfcc(signal, fs, n_ceps, n_filters=40,
+            win=0.025, shift=0.01,
 			delta1=True, delta2=True, energy=True,
 			normalize=True, clean=True,
 			vad=True, returnVAD=False):
@@ -1334,7 +1335,7 @@ class Speech():
         # MFCC
         mfcc = sidekit.frontend.features.mfcc(signal,
         				lowfreq=f_min, maxfreq=f_max,
-        				nlinfilt=0, nlogfilt=n_filters, nfft=nfft,
+        				nlinfilt=0, nlogfilt=n_filters,
         				fs=fs, nceps=n_ceps, midfreq=1000,
         				nwin=nwin, shift=shift,
         				get_spec=False, get_mspec=False)
