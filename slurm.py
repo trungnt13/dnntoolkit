@@ -92,7 +92,8 @@ def _create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
         arch = 'gputest'
 
     # ====== Select number of node ====== #
-    # n_node = math.ceil(n_gpu / 2)
+    n_node = math.ceil(n_gpu / 2)
+    n_gpu = 2
 
     # ====== Create multiple script ====== #
     if isinstance(command, str) or not hasattr(command, '__len__'):
@@ -262,3 +263,6 @@ if __name__ == '__main__':
 # python runner.py -t 2b52020mfcc  -d 4320 -m 15000 -f model_runner.py m2b 5_20_20_mfcc_set01 train.yaml
 # python runner.py -t 2b52010mfcc  -d 4320 -m 15000 -f model_runner.py m2b 5_20_10_mfcc_set01 train.yaml
 # python runner.py -t 2b52010attr  -d 4320 -m 15000 -f model_runner.py m2b 5_20_10_attr_set01 train.yaml
+
+# salloc --nodes=1 --ntasks=10 --mem-per-cpu=1000 -t 00:15:00 -p serial srun mpirun -n 10 python2.7-mpi demo1.py
+# salloc --nodes=1 --gres=gpu:2 --ntasks=2 --mem-per-cpu=8000 -t 00:15:00 -p gpu srun mpirun -n 2 python2.7-mpi demo1.py
