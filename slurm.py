@@ -49,7 +49,7 @@ _CPU_SLURM = \
 #SBATCH -J %s
 #SBATCH -o %s
 #SBATCH -e %s
-#SBATCH --constraint="hsw"
+#SBATCH --constraint="snb"
 #SBATCH -p %s
 #SBATCH --ntasks %d
 #SBATCH --mem-per-cpu=%d
