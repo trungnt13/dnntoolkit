@@ -13,18 +13,19 @@ import math
 # ======================================================================
 # COnst
 # ======================================================================
-# #SBATCH --exclusive
+#SBATCH --exclusive
+#SBATCH --constraint="snb|hsw"
 
 _GPU_SLURM = \
 """#!/bin/bash
 # author: trungnt
-#SBATCH --nodes %d
 #SBATCH -p %s
 #SBATCH -t %02d:%02d:00
 #SBATCH --begin=now+%dminute
 #SBATCH -J %s
 #SBATCH -o %s
 #SBATCH -e %s
+#SBATCH --nodes %d
 #SBATCH --mem=%d
 #SBATCH --gres=gpu:%d
 #SBATCH --mail-type=BEGIN,FAIL,END # Type of email notification- BEGIN,END,FAIL,ALL
@@ -44,14 +45,13 @@ source deactivate
 _CPU_SLURM = \
 """#!/bin/bash
 # author: trungnt
-#SBATCH --nodes %d
 #SBATCH -t %02d:%02d:00
 #SBATCH --begin=now+%dminute
 #SBATCH -J %s
 #SBATCH -o %s
 #SBATCH -e %s
-#SBATCH --constraint="snb"
 #SBATCH -p %s
+#SBATCH --nodes %d
 #SBATCH --ntasks %d
 #SBATCH --mem-per-cpu=%d
 #SBATCH --mail-type=BEGIN,FAIL,END
@@ -102,7 +102,9 @@ def _create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
     command = ';'.join(command)
 
     # SBATCH --exclusive
-    slurm_text = _GPU_SLURM % (n_node, arch, hour, minute, delay, task_name, log_path, log_path, mem, n_gpu, command)
+    slurm_text = _GPU_SLURM % (arch, hour, minute, delay,
+                               task_name, log_path, log_path,
+                               n_node, mem, n_gpu, command)
     f = open('tmp_train_gpu.slurm', 'w')
     f.write(slurm_text)
     f.close()
@@ -168,7 +170,9 @@ def _create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000)
     command = ['srun --nodes=%d --ntasks=%d ' % (n_node, nb_core) + c for c in command]
     command = ';'.join(command)
 
-    slurm_text = _CPU_SLURM % (n_node, hour, minute, delay, task_name, log_path, log_path, machine_type, nb_core, mem, command)
+    slurm_text = _CPU_SLURM % (hour, minute, delay,
+                               task_name, log_path, log_path,
+                               machine_type, n_node, nb_core, mem, command)
     f = open('tmp_train_cpu.slurm', 'w')
     f.write(slurm_text)
     f.close()
