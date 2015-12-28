@@ -153,7 +153,10 @@ def _create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000)
     mem = int(mem / float(nb_core))
 
     # ====== calculate number of node ====== #
-    n_node = math.ceil(nb_core / 16)
+    if nb_core <= 24 and mem <= 2500:
+        n_node = 1
+    else:
+        n_node = math.ceil(nb_core / 16)
     if mem > 2500:
         n_node = max(n_node, math.ceil(mem / 2500))
 
