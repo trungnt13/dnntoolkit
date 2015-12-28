@@ -167,7 +167,7 @@ def _create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000)
     # ====== Join multiple command ====== #
     if isinstance(command, str) or not hasattr(command, '__len__'):
         command = [command]
-    command = ['srun --nodes=%d --ntasks=%d ' % (n_node, nb_core) + c for c in command]
+    command = ['srun -p %s --nodes=%d --ntasks=%d ' % (machine_type, n_node, nb_core) + c for c in command]
     command = ';'.join(command)
 
     slurm_text = _CPU_SLURM % (hour, minute, delay,
