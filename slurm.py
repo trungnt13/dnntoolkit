@@ -40,6 +40,7 @@ source activate ai
 source deactivate
 """
 
+# |hsw
 _CPU_SLURM = \
 """#!/bin/bash
 # author: trungnt
@@ -148,18 +149,23 @@ def _create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000)
     nb_core = int(nb_core)
 
     mem = int(mem / float(nb_core))
-    machine_type = 'serial'
-    if mem > 16000:
-        machine_type = 'hugemem'
 
     # ====== calculate number of node ====== #
     n_node = math.ceil(nb_core / 24)
     if mem > 2500:
         n_node = max(n_node, math.ceil(mem / 2500))
 
+    # ====== machine type ====== #
+    machine_type = 'serial'
+    if mem > 16000:
+        machine_type = 'hugemem'
+    elif n_node > 1:
+        machine_type = 'parallel'
+
     # ====== Join multiple command ====== #
     if isinstance(command, str) or not hasattr(command, '__len__'):
         command = [command]
+    command = ['srun --nodes=%d --ntasks=%d ' % (n_node, nb_core) + c for c in command]
     command = ';'.join(command)
 
     slurm_text = _CPU_SLURM % (n_node, hour, minute, delay, task_name, log_path, log_path, machine_type, nb_core, mem, command)
