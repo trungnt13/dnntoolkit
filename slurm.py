@@ -199,7 +199,7 @@ def cpu(task_name, duration, script, n_cpu=4, mem=12000, delay=0):
 # ======================================================================
 def slurm_parser():
     parser = argparse.ArgumentParser(
-        description='Science the sh*t out of Deep Learning!',
+        description='Science the sh*t out of SLURM!',
         version='0.1',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=True)
@@ -215,16 +215,15 @@ def slurm_parser():
     group.add_argument('-w', action='store', type=int, default=0,
             metavar='int',
             help='Run the task after minutes, default=0')
-
     group.add_argument('-p', action='store', choices=('gpu', 'cpu'), default = 'gpu',
             metavar='cpu|gpu',
             help='run the task on GPU or CPU, default=gpu')
     group.add_argument('-m', action='store', type=int, default = 12000,
             metavar='int',
             help='memory for the job, default=12000 MB')
-    group.add_argument('-np', action='store', type=int, default = 1,
+    group.add_argument('-n', action='store', type=int, default = 1,
             metavar='int',
-            help='Number of core for CPU task')
+            help='Number of processor for CPU or GPU task')
 
     group.add_argument('-f', action='append', required=True, nargs='+',
             metavar='list',
@@ -240,11 +239,9 @@ if __name__ == '__main__':
         results = parser.parse_args()
 
         if results.p == 'gpu':
-            s = _create_slurm_gpu(results.t, results.d, results.w, results.f, results.np, results.m)
-            print(s)
+            gpu(results.t, results.d, results.f, n_gpu=results.n, mem=results.m, delay = results.w)
         elif results.p == 'cpu':
-            s = _create_slurm_cpu(results.t, results.d, results.w, results.f, results.np, results.m)
-            print(s)
+            cpu(results.t, results.d, results.f, n_cpu=results.n, mem=results.m, delay = results.w)
         else:
             parser.print_help()
     else:
