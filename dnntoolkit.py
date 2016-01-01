@@ -117,7 +117,7 @@ class mpi():
                 features_func
                 \ \ \ | / / /
                   save_func
-
+            * NO need call Barrier at the end of this methods
         Parameters
         ----------
         jobs_list : list
