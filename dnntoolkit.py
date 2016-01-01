@@ -175,6 +175,7 @@ class mpi():
             if i >= len(jobs) or len(data) >= n_cache:
                 all_data = comm.gather(data, root=0)
                 if rank == 0:
+                    print('Saving data at process 0')
                     save_func([k for j in all_data for k in j])
                 data = []
                 if i >= len(jobs): continue
@@ -188,6 +189,7 @@ class mpi():
 
         all_data = comm.gather(data, root=0)
         if rank == 0:
+            print('Saving data at process 0')
             save_func([k for j in all_data for k in j])
 
 
