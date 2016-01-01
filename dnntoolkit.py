@@ -112,6 +112,11 @@ class mpi():
     @staticmethod
     def preprocess_mpi(jobs_list, features_func, save_func, n_cache=30):
         ''' Wrapped preprocessing procedure in MPI.
+                    root
+                / / / | \ \ \
+                features_func
+                \ \ \ | / / /
+                  save_func
 
         Parameters
         ----------
@@ -1034,7 +1039,7 @@ class _batch(object):
             return 'None'
         return '<' + self._name + ' ' + str(self.shape) + ' ' + str(self.dtype) + '>'
 
-class Dataset(object):
+class dataset(object):
 
     '''
         Example
@@ -1042,7 +1047,7 @@ class Dataset(object):
             def normalization(x):
                 return x.astype(np.float32)
 
-            d = dnntoolkit.Dataset('tmp.hdf', 'w', normalizer=normalization, batch_size=2, shuffle=True)
+            d = dnntoolkit.dataset('tmp.hdf', 'w', normalizer=normalization, batch_size=2, shuffle=True)
             d['X'] = np.zeros((2, 3))
             print('X' in d)
             >>> True
@@ -1086,7 +1091,7 @@ class Dataset(object):
     '''
 
     def __init__(self, path, mode='r', batch_size=512, normalizer=None, shuffle=True):
-        super(Dataset, self).__init__()
+        super(dataset, self).__init__()
         if not isinstance(batch_size, int):
             raise TypeError('Batch size must be integer')
 
@@ -1176,7 +1181,7 @@ class Dataset(object):
 # ======================================================================
 # Visualiztion
 # ======================================================================
-class Visual():
+class visual():
     chars = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
 
     @staticmethod
@@ -1234,14 +1239,14 @@ class Visual():
         '''
         def visual(val, max_val):
             if abs(val) == max_val:
-                step = len(Visual.chars) - 1
+                step = len(visual.chars) - 1
             else:
-                step = int(abs(float(val) / max_val) * len(Visual.chars))
+                step = int(abs(float(val) / max_val) * len(visual.chars))
             colourstart = ""
             colourend = ""
             if val < 0:
                 colourstart, colourend = '\033[90m', '\033[0m'
-            return colourstart + Visual.chars[step] + colourend
+            return colourstart + visual.chars[step] + colourend
 
         if max_arr is None:
             max_arr = arr
@@ -1293,7 +1298,7 @@ class Visual():
         ax.invert_yaxis()
         return ax
 
-class Logger():
+class logger():
     chars = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
 
     _last_value = 0
@@ -1314,12 +1319,12 @@ class Logger():
             fmt_str = fmt_str[1:]
             fmt_str += '\n'
         # ====== ETA: estimated time of arrival ====== #
-        if Logger._last_time < 0:
-            Logger._last_time = time.time()
-        eta = (max_val - p) / max(1e-13, abs(p - Logger._last_value)) * (time.time() - Logger._last_time)
-        etd = time.time() - Logger._last_time
-        Logger._last_value = p
-        Logger._last_time = time.time()
+        if logger._last_time < 0:
+            logger._last_time = time.time()
+        eta = (max_val - p) / max(1e-13, abs(p - logger._last_value)) * (time.time() - logger._last_time)
+        etd = time.time() - logger._last_time
+        logger._last_value = p
+        logger._last_time = time.time()
         # ====== print ====== #
         max_val_bar = 20
         n_bar = int(p / max_val * max_val_bar)
@@ -1368,6 +1373,30 @@ class speech():
     # ======================================================================
     # Predefined datasets information
     # ======================================================================
+    nist15_cluster_lang = OrderedDict([
+        ['ara', ['ara-arz', 'ara-acm', 'ara-apc', 'ara-ary', 'ara-arb']],
+        ['zho', ['zho-yue', 'zho-cmn', 'zho-cdo', 'zho-wuu']],
+        ['eng', ['eng-gbr', 'eng-usg', 'eng-sas']],
+        ['fre', ['fre-waf', 'fre-hat']],
+        ['qsl', ['qsl-pol', 'qsl-rus']],
+        ['spa', ['spa-car', 'spa-eur', 'spa-lac', 'spa-brz']]
+    ])
+    nist15_lang_list = np.asarray([
+        'ara-arz', 'ara-acm', 'ara-apc', 'ara-ary', 'ara-arb',
+        'zho-yue', 'zho-cmn', 'zho-cdo', 'zho-wuu',
+        'eng-gbr', 'eng-usg', 'eng-sas',
+        'fre-waf', 'fre-hat',
+        'qsl-pol', 'qsl-rus',
+        'spa-car', 'spa-eur', 'spa-lac', 'spa-brz'])
+    nist15_within_cluster = {
+        'ara-arz': 0, 'ara-acm': 1, 'ara-apc': 2, 'ara-ary': 3, 'ara-arb': 4,
+        'zho-yue': 0, 'zho-cmn': 1, 'zho-cdo': 2, 'zho-wuu': 3,
+        'eng-gbr': 0, 'eng-usg': 1, 'eng-sas': 2,
+        'fre-waf': 0, 'fre-hat': 1,
+        'qsl-pol': 0, 'qsl-rus': 1,
+        'spa-car': 0, 'spa-eur': 1, 'spa-lac': 2, 'spa-brz': 3
+    }
+
     @staticmethod
     def timit_phonemes(p, map39=False):
         ''' Mapping from 61 classes to 39 classes '''
@@ -1382,43 +1411,22 @@ class speech():
     @staticmethod
     def nist15_label(label, lang=False, cluster=False, within_cluster=False):
         label = label.replace('por', 'spa')
-
-        cluster_lang = OrderedDict([
-            ['ara', ['ara-arz', 'ara-acm', 'ara-apc', 'ara-ary', 'ara-arb']],
-            ['zho', ['zho-yue', 'zho-cmn', 'zho-cdo', 'zho-wuu']],
-            ['eng', ['eng-gbr', 'eng-usg', 'eng-sas']],
-            ['fre', ['fre-waf', 'fre-hat']],
-            ['qsl', ['qsl-pol', 'qsl-rus']],
-            ['spa', ['spa-car', 'spa-eur', 'spa-lac', 'spa-brz']]
-        ])
-        lang_list = np.asarray([
-            'ara-arz', 'ara-acm', 'ara-apc', 'ara-ary', 'ara-arb',
-            'zho-yue', 'zho-cmn', 'zho-cdo', 'zho-wuu',
-            'eng-gbr', 'eng-usg', 'eng-sas',
-            'fre-waf', 'fre-hat',
-            'qsl-pol', 'qsl-rus',
-            'spa-car', 'spa-eur', 'spa-lac', 'spa-brz'])
-        in_cluster = {
-            'ara-arz': 0, 'ara-acm': 1, 'ara-apc': 2, 'ara-ary': 3, 'ara-arb': 4,
-            'zho-yue': 0, 'zho-cmn': 1, 'zho-cdo': 2, 'zho-wuu': 3,
-            'eng-gbr': 0, 'eng-usg': 1, 'eng-sas': 2,
-            'fre-waf': 0, 'fre-hat': 1,
-            'qsl-pol': 0, 'qsl-rus': 1,
-            'spa-car': 0, 'spa-eur': 1, 'spa-lac': 2, 'spa-brz': 3
-        }
+        rval = []
         if lang:
-            for i, j in enumerate(lang_list):
+            for i, j in enumerate(speech.nist15_lang_list):
                 if j in label:
-                    return i
+                    rval.append(i)
         if cluster:
-            for i, j in enumerate(cluster_lang.keys()):
+            for i, j in enumerate(speech.nist15_cluster_lang.keys()):
                 if j in label:
-                    return i
+                    rval.append(i)
         if within_cluster:
-            for i in in_cluster.keys():
+            for i in speech.nist15_within_cluster.keys():
                 if i in label:
-                    return in_cluster[i]
-        return None
+                    rval.append(speech.nist15_within_cluster[i])
+        if len(rval) == 1:
+            rval = rval[0]
+        return rval
 
     # ======================================================================
     # Speech Signal Processing
