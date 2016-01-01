@@ -40,7 +40,7 @@ import numpy as np
 import scipy as sp
 
 import theano
-from theano import tensor
+from theano import tensor as T
 
 import h5py
 
@@ -211,12 +211,15 @@ class io():
 # ======================================================================
 # Array Utils
 # ======================================================================
-class T():
+class tensor():
+    # ======================================================================
+    # Sequence processing
+    # ======================================================================
 
     @staticmethod
     def pad_sequences(sequences, maxlen=None, dtype='int32',
                       padding='pre', truncating='pre', value=0.):
-        """
+        '''
         Pad each sequence to the same length:
         the length of the longest sequence.
 
@@ -237,9 +240,18 @@ class T():
             value: float, value to pad the sequences to the desired value.
 
         Returns:
+        -------
         x: numpy array with dimensions (number_of_sequences, maxlen)
 
-        """
+        Example:
+        -------
+            > pad_sequences([[1,2,3],
+                             [1,2],
+                             [1,2,3,4]], maxlen=3, padding='post', truncating='pre')
+            > [[1,2,3],
+               [1,2,0],
+               [2,3,4]]
+        '''
         lengths = [len(s) for s in sequences]
 
         nb_samples = len(sequences)
@@ -296,6 +308,57 @@ class T():
         return Y
 
     @staticmethod
+    def split_chunks(a, maxlen, overlap):
+        '''
+        Example
+        -------
+            > print(split_chunks(np.array([1, 2, 3, 4, 5, 6, 7, 8]), 5, 1))
+            > [[1, 2, 3, 4, 5], [4, 5, 6, 7, 8]]
+        '''
+        chunks = []
+        nchunks = int((max(a.shape) - maxlen) / (maxlen - overlap)) + 1
+        for i in xrange(nchunks):
+            start = i * (maxlen - overlap)
+            chunks.append(a[start: start + maxlen])
+
+        # ====== Some spare frames at the end ====== #
+        wasted = max(a.shape) - start - maxlen
+        if wasted >= (maxlen - overlap) / 2:
+            chunks.append(a[-maxlen:])
+        return chunks
+
+    @staticmethod
+    def shrink_labels(labels, maxdist=1):
+        '''
+        Example
+        -------
+            > print(shrink_labels(np.array([0, 0, 1, 0, 1, 1, 0, 0, 4, 5, 4, 6, 6, 0, 0]), 1))
+            > [0, 1, 0, 1, 0, 4, 5, 4, 6, 0]
+            > print(shrink_labels(np.array([0, 0, 1, 0, 1, 1, 0, 0, 4, 5, 4, 6, 6, 0, 0]), 2))
+            > [0, 1, 0, 4, 6, 0]
+        '''
+        maxdist = max(1, maxdist)
+
+        out = []
+        l = max(labels.shape)
+        i = 0
+        while i < l:
+            out.append(labels[i])
+            last_val = labels[i]
+
+            dist = min(maxdist, l - i - 1)
+            j = 1
+            while (i + j < l and labels[i + j] == last_val) or (j < dist):
+                j += 1
+            i += j
+
+        return out
+
+    # ======================================================================
+    # Theano
+    # ======================================================================
+
+    @staticmethod
     def floatX(X):
         return np.asarray(X, dtype=theano.config.floatX)
 
@@ -330,6 +393,21 @@ class T():
         elif ndim == 4:
             return T.tensor4()
         return T.matrix()
+
+    @staticmethod
+    def one_hot_max(x):
+        '''
+        Example
+        -------
+            Input: [[0.0, 0.0, 0.5],
+                    [0.0, 0.3, 0.1],
+                    [0.6, 0.0, 0.2]]
+
+            Output: [[0.0, 0.0, 1.0],
+                    [0.0, 1.0, 0.0],
+                    [1.0, 0.0, 0.0]]
+        '''
+        return T.cast(T.eq(T.arange(x.shape[1])[None, :], T.argmax(x, axis=1, keepdims=True)), theano.config.floatX)
 
     @staticmethod
     def on_gpu():
@@ -1280,13 +1358,71 @@ class Logger():
 # ======================================================================
 # Feature
 # ======================================================================
-class Speech():
+class speech():
 
-    """docstring for Speech"""
+    """docstring for speech"""
 
     def __init__(self):
-        super(Speech, self).__init__()
+        super(speech, self).__init__()
 
+    # ======================================================================
+    # Predefined datasets information
+    # ======================================================================
+    @staticmethod
+    def timit_phonemes(p, map39=False):
+        ''' Mapping from 61 classes to 39 classes '''
+        phonemes = ['aa', 'ae', 'ah', 'ao', 'aw', 'ax', 'ax-h', 'axr', 'ay',
+            'b', 'bcl', 'ch', 'd', 'dcl', 'dh', 'dx', 'eh', 'el', 'em', 'en', 'eng',
+            'epi', 'er', 'ey', 'f', 'g', 'gcl', 'h#', 'hh', 'hv', 'ih', 'ix', 'iy',
+            'jh', 'k', 'kcl', 'l', 'm', 'n', 'ng', 'nx', 'ow', 'oy', 'p', 'pau',
+            'pcl', 'q', 'r', 's', 'sh', 't', 'tcl', 'th', 'uh', 'uw', 'ux', 'v',
+            'w', 'y', 'z', 'zh']
+        return phonemes.index(p)
+
+    @staticmethod
+    def nist15_label(label, lang=False, cluster=False, within_cluster=False):
+        label = label.replace('por', 'spa')
+
+        cluster_lang = OrderedDict([
+            ['ara', ['ara-arz', 'ara-acm', 'ara-apc', 'ara-ary', 'ara-arb']],
+            ['zho', ['zho-yue', 'zho-cmn', 'zho-cdo', 'zho-wuu']],
+            ['eng', ['eng-gbr', 'eng-usg', 'eng-sas']],
+            ['fre', ['fre-waf', 'fre-hat']],
+            ['qsl', ['qsl-pol', 'qsl-rus']],
+            ['spa', ['spa-car', 'spa-eur', 'spa-lac', 'spa-brz']]
+        ])
+        lang_list = np.asarray([
+            'ara-arz', 'ara-acm', 'ara-apc', 'ara-ary', 'ara-arb',
+            'zho-yue', 'zho-cmn', 'zho-cdo', 'zho-wuu',
+            'eng-gbr', 'eng-usg', 'eng-sas',
+            'fre-waf', 'fre-hat',
+            'qsl-pol', 'qsl-rus',
+            'spa-car', 'spa-eur', 'spa-lac', 'spa-brz'])
+        in_cluster = {
+            'ara-arz': 0, 'ara-acm': 1, 'ara-apc': 2, 'ara-ary': 3, 'ara-arb': 4,
+            'zho-yue': 0, 'zho-cmn': 1, 'zho-cdo': 2, 'zho-wuu': 3,
+            'eng-gbr': 0, 'eng-usg': 1, 'eng-sas': 2,
+            'fre-waf': 0, 'fre-hat': 1,
+            'qsl-pol': 0, 'qsl-rus': 1,
+            'spa-car': 0, 'spa-eur': 1, 'spa-lac': 2, 'spa-brz': 3
+        }
+        if lang:
+            for i, j in enumerate(lang_list):
+                if j in label:
+                    return i
+        if cluster:
+            for i, j in enumerate(cluster_lang.keys()):
+                if j in label:
+                    return i
+        if within_cluster:
+            for i in in_cluster.keys():
+                if i in label:
+                    return in_cluster[i]
+        return None
+
+    # ======================================================================
+    # Speech Signal Processing
+    # ======================================================================
     @staticmethod
     def read(f, pcm = False):
         '''
@@ -1310,17 +1446,6 @@ class Speech():
         return signal
 
     @staticmethod
-    def timit_phonemes(p, map39=False):
-        ''' Mapping from 61 classes to 39 classes '''
-        phonemes = ['aa', 'ae', 'ah', 'ao', 'aw', 'ax', 'ax-h', 'axr', 'ay',
-            'b', 'bcl', 'ch', 'd', 'dcl', 'dh', 'dx', 'eh', 'el', 'em', 'en', 'eng',
-            'epi', 'er', 'ey', 'f', 'g', 'gcl', 'h#', 'hh', 'hv', 'ih', 'ix', 'iy',
-            'jh', 'k', 'kcl', 'l', 'm', 'n', 'ng', 'nx', 'ow', 'oy', 'p', 'pau',
-            'pcl', 'q', 'r', 's', 'sh', 't', 'tcl', 'th', 'uh', 'uw', 'ux', 'v',
-            'w', 'y', 'z', 'zh']
-        return phonemes.index(p)
-
-    @staticmethod
     def logmel(signal, fs, n_filters=40, n_ceps=13,
             win=0.025, shift=0.01,
             delta1=True, delta2=True, energy=True,
@@ -1341,7 +1466,7 @@ class Speech():
         #####################################
         # 2. preprocess.
         if clean:
-            signal = Speech.preprocess(signal)
+            signal = speech.preprocess(signal)
 
         #####################################
         # 3. logmel.
@@ -1404,7 +1529,7 @@ class Speech():
         #####################################
         # 2. Speech.
         if clean:
-            signal = Speech.preprocess(signal)
+            signal = speech.preprocess(signal)
 
         #####################################
         # 3. mfcc.
@@ -1497,7 +1622,7 @@ class Speech():
 
         results = []
         for ytrue, ypred in izip(y_true, y_pred):
-            results.append(Speech.LevenshteinDistance(ytrue, ypred) / len(ytrue))
+            results.append(speech.LevenshteinDistance(ytrue, ypred) / len(ytrue))
         if return_mean:
             return np.mean(results)
         return results
