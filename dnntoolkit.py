@@ -1167,8 +1167,11 @@ class dataset(object):
             self.hdf[key] = value
         else:
             if key not in self.hdf:
-                self.hdf.create_dataset(key, data=value, dtype=value.dtype,
-                    maxshape=(None,) + value.shape[1:], chunks=True)
+                if hasattr(value, 'dtype'):
+                    self.hdf.create_dataset(key, data=value, dtype=value.dtype,
+                        maxshape=(None,) + value.shape[1:], chunks=True)
+                else:
+                    self.hdf[key] = value
             if key not in self._datamap:
                 self._datamap[key] = _batch(self, key)
 
