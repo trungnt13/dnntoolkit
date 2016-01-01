@@ -534,13 +534,13 @@ def _check_hope_and_hop(validation):
     return shouldSave, shouldStop
 
 # TODO: Add implementation for loading the whole models
-class Model(object):
+class model(object):
 
     """docstring for Model
     """
 
     def __init__(self):
-        super(Model, self).__init__()
+        super(model, self).__init__()
         self._history = []
         self._weights = []
         self._save_path = None
@@ -820,12 +820,12 @@ class Model(object):
     @staticmethod
     def load(path):
         if not os.path.exists(path):
-            m = Model()
+            m = model()
             m._save_path = path
             return m
         import cPickle
 
-        m = Model()
+        m = model()
         m._save_path = path
 
         f = h5py.File(path, 'r')
@@ -1156,15 +1156,21 @@ class dataset(object):
 
     def __getitem__(self, key):
         if key not in self._datamap:
-            self._datamap[key] = _batch(self, key)
+            if self.hdf[key].dtype == np.dtype('O'):
+                return self.hdf[key]
+            else:
+                self._datamap[key] = _batch(self, key)
         return self._datamap[key]
 
     def __setitem__(self, key, value):
-        if key not in self.hdf:
-            self.hdf.create_dataset(key, data=value, dtype=value.dtype,
-                maxshape=(None,) + value.shape[1:], chunks=True)
-        if key not in self._datamap:
-            self._datamap[key] = _batch(self, key)
+        if isinstance(value, str):
+            self.hdf[key] = value
+        else:
+            if key not in self.hdf:
+                self.hdf.create_dataset(key, data=value, dtype=value.dtype,
+                    maxshape=(None,) + value.shape[1:], chunks=True)
+            if key not in self._datamap:
+                self._datamap[key] = _batch(self, key)
 
     def __contains__(self, key):
         return key in self.hdf
