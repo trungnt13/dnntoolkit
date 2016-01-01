@@ -189,7 +189,7 @@ class mpi():
 
         all_data = comm.gather(data, root=0)
         if rank == 0:
-            print('Saving data before exit !!!!')
+            print('Saving data before exit !!!!\n')
             save_func([k for j in all_data for k in j])
 
 
