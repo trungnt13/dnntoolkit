@@ -1156,7 +1156,7 @@ class dataset(object):
 
     def __getitem__(self, key):
         if key not in self._datamap:
-            if self.hdf[key].dtype == np.dtype('O'):
+            if key in self.hdf and self.hdf[key].dtype == np.dtype('O'):
                 return self.hdf[key]
             else:
                 self._datamap[key] = _batch(self, key)
