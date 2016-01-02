@@ -164,7 +164,7 @@ class mpi():
         comm.Barrier()
 
         jobs = comm.scatter(jobs, root=0)
-        n_loop = comm.bcast(n_loop, root=0) + 1
+        n_loop = comm.bcast(n_loop, root=0)
         print('Process %d receive %d jobs' % (rank, len(jobs)))
 
         #####################################
@@ -189,6 +189,7 @@ class mpi():
             if (i + 1) % 50 == 0:
                 print('Rank:%d preprocessed %d files!' % (rank, i))
 
+        print('p=%d pos=0' % rank)
         all_data = comm.gather(data, root=0)
         if rank == 0:
             print('Saving data before exit !!!!\n')
