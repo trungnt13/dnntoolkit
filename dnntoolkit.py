@@ -165,6 +165,7 @@ class mpi():
 
         jobs = comm.scatter(jobs, root=0)
         n_loop = comm.bcast(n_loop, root=0)
+        comm.Barrier()
         print('Process %d receive %d jobs' % (rank, len(jobs)))
 
         #####################################
@@ -189,7 +190,7 @@ class mpi():
             if feature is not None:
                 data.append(feature)
 
-            if (i + 1) % 1 == 0:
+            if i % 50 == 0:
                 print('Rank:%d preprocessed %d files!' % (rank, i))
 
         print('p=%d pos=2' % rank)
