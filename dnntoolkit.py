@@ -146,6 +146,7 @@ class mpi():
             >>>     f['idx'] = idx
             >>>     f.close()
         '''
+        global MPI
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         npro = comm.Get_size()
