@@ -185,6 +185,7 @@ class mpi():
                         save_func(all_data)
                 data = []
                 if i >= len(jobs): continue
+                comm.Barrier()
 
             feature = features_func(jobs[i])
             if feature is not None:
