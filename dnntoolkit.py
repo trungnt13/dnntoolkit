@@ -192,9 +192,6 @@ class mpi():
             print('Saving data before exit !!!!\n')
             save_func([k for j in all_data for k in j])
 
-        comm.Barrier()
-
-
 # ======================================================================
 # io helper
 # ======================================================================
