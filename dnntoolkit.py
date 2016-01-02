@@ -172,11 +172,13 @@ class mpi():
         data = []
 
         for i in xrange(n_loop):
-            print('p=%d pos=%d' % (rank, i))
             if i >= len(jobs) or len(data) >= n_cache:
-                print('p=%d shit-in' % (rank))
+                if rank == 3:
+                    print(data)
+                    print('p=%d shit-in' % (rank))
                 all_data = comm.gather(data, root=0)
-                print('p=%d shit-out' % (rank))
+                if rank == 3:
+                    print('p=%d shit-out' % (rank))
                 if rank == 0:
                     print('Saving data at process 0')
                     all_data = [k for j in all_data for k in j]
