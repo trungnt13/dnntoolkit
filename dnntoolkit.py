@@ -554,6 +554,8 @@ class model(object):
         self._sandbox = ''
 
         self._model = None
+        self._model_args = None
+        self._model_name = None
 
     # ==================== Model manager ==================== #
     def set_weights(self, weights):
@@ -564,18 +566,27 @@ class model(object):
     def get_weights(self):
         return self._weights
 
-    def save_model(self, model, api):
+    def set_model(self, model, api, **kwargs):
+        ''' Save a function that create your model.
+
+        Parameters
+        ----------
+        model : __call__ object
+            main function that create your model
+        api : str
+            support: lasagne | keras | blocks
+        kwargs : **
+            any arguments for your model creatation function
         '''
-        model: is a callable() without any arguments, return model when called
-        '''
-        import marshal
-        import cPickle
+        if not hasattr(model, '__call__'):
+            raise NotImplementedError('Model must be a function return computational graph')
+
         primitive = (bool, int, float, str)
         sandbox = {}
 
         if 'lasagne' in api:
             self._api = 'lasagne'
-            self._model_func = marshal.dumps(model.func_code)
+            self._model_func = model
             for k, v in model.func_globals.items():
                 if isinstance(v, primitive):
                     sandbox[k] = v
@@ -586,24 +597,17 @@ class model(object):
             self._api = 'blocks'
             raise NotImplementedError()
         #H5py not support binary string, cannot use marshal
-        self._sandbox = cPickle.dumps(sandbox)
+        self._sandbox = sandbox
+        self._model_args = kwargs
+        self._model_name = model.func_name
 
-    def _init_model(self):
+    def create_model(self):
         if self._model_func is None:
             raise ValueError("You must save_model first")
         if self._model is None:
-            import types
-            import marshal
-            import cPickle
-
-            code = marshal.loads(self._model_func)
-            sandbox = cPickle.loads(self._sandbox)
-            globals()[self._api] = __import__(self._api)
-            for k, v in sandbox.iteritems():
-                globals()[k] = v
-
-            func = types.FunctionType(code, globals(), "create_model")
-            self._model = func()
+            func = self._model_func
+            args = self._model_args
+            self._model = func(**args)
 
             if self._api == 'lasagne':
                 import lasagne
@@ -616,9 +620,10 @@ class model(object):
                     on_unused_input=None)
             else:
                 raise NotImplementedError()
+        return self._model
 
     def pred(self, *X):
-        self._init_model()
+        self.create_model()
         return self._pred(*X)
 
     # ==================== History manager ==================== #
@@ -806,15 +811,19 @@ class model(object):
         self._save_path = path
 
         import cPickle
+        import marshal
         from array import array
 
         f = h5py.File(path, 'w')
         f['history'] = cPickle.dumps(self._history)
 
-        b = array("B", self._model_func)
+        model_func = marshal.dumps(self._model_func.func_code)
+        b = array("B", model_func)
         f['model_func'] = cPickle.dumps(b)
+        f['model_args'] = cPickle.dumps(self._model_args)
+        f['model_name'] = self._model_name
+        f['sandbox'] = cPickle.dumps(self._sandbox)
         f['api'] = self._api
-        f['sandbox'] = self._sandbox
 
         for i, w in enumerate(self._weights):
             f['weight_%d' % i] = w
@@ -828,6 +837,8 @@ class model(object):
             m._save_path = path
             return m
         import cPickle
+        import marshal
+        import types
 
         m = model()
         m._save_path = path
@@ -835,10 +846,17 @@ class model(object):
         f = h5py.File(path, 'r')
         m._history = cPickle.loads(f['history'].value)
 
-        b = cPickle.loads(f['model_func'].value)
-        m._model_func = b.tostring()
         m._api = f['api'].value
-        m._sandbox = f['sandbox'].value
+        m._model_name = f['model_name'].value
+        m._model_args = cPickle.loads(f['model_args'].value)
+        m._sandbox = cPickle.loads(f['sandbox'].value)
+        globals()[m._api] = __import__(m._api)
+        for k, v in m._sandbox.iteritems():
+            globals()[k] = v
+
+        b = cPickle.loads(f['model_func'].value)
+        m._model_func = marshal.loads(b.tostring())
+        m._model_func = types.FunctionType(m._model_func, globals(), m._model_name)
 
         m._weights = []
         for i in xrange(f['nb_weights'].value):
