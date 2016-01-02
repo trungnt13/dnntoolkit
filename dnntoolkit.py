@@ -146,7 +146,6 @@ class mpi():
             >>>     f['idx'] = idx
             >>>     f.close()
         '''
-        from mpi4py import MPI
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         npro = comm.Get_size()
@@ -165,7 +164,6 @@ class mpi():
 
         jobs = comm.scatter(jobs, root=0)
         n_loop = comm.bcast(n_loop, root=0)
-        comm.Barrier()
         print('Process %d receive %d jobs' % (rank, len(jobs)))
 
         #####################################
