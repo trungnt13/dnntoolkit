@@ -178,7 +178,7 @@ class mpi():
                     print('Saving data at process 0')
                     all_data = [k for j in all_data for k in j]
                     if len(all_data) > 0:
-                        save_func()
+                        save_func(all_data)
                 data = []
                 if i >= len(jobs): continue
 
@@ -194,7 +194,7 @@ class mpi():
             print('Saving data before exit !!!!\n')
             all_data = [k for j in all_data for k in j]
             if len(all_data) > 0:
-                save_func()
+                save_func(all_data)
 
 # ======================================================================
 # io helper
