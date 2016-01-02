@@ -195,6 +195,7 @@ class mpi():
                 print('Rank:%d preprocessed %d files!' % (rank, i))
 
         print('p=%d end-loop' % (rank))
+        comm.Barrier()
         all_data = comm.gather(data, root=0)
         if rank == 0:
             print('Saving data before exit !!!!\n')
