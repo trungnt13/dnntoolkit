@@ -187,7 +187,7 @@ class mpi():
             if feature is not None:
                 data.append(feature)
 
-            if (i + 1) % 50 == 0:
+            if (i + 1) % 1 == 0:
                 print('Rank:%d preprocessed %d files!' % (rank, i))
 
         print('p=%d pos=1' % rank)
