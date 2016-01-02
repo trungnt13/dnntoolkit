@@ -174,7 +174,6 @@ class mpi():
         for i in xrange(n_loop):
             if i >= len(jobs) or len(data) >= n_cache:
                 if rank == 3:
-                    print(data)
                     print('p=%d shit-in' % (rank))
                 all_data = comm.gather(data, root=0)
                 if rank == 3:
@@ -194,6 +193,7 @@ class mpi():
             if i % 50 == 0:
                 print('Rank:%d preprocessed %d files!' % (rank, i))
 
+        print('p=%d end-loop' % (rank))
         all_data = comm.gather(data, root=0)
         if rank == 0:
             print('Saving data before exit !!!!\n')
