@@ -146,7 +146,7 @@ class mpi():
             >>>     f['idx'] = idx
             >>>     f.close()
         '''
-        global MPI
+        from mpi4py import MPI
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         npro = comm.Get_size()
@@ -200,6 +200,9 @@ class mpi():
             all_data = [k for j in all_data for k in j]
             if len(all_data) > 0:
                 save_func(all_data)
+
+        print('p=%d pos=3' % rank)
+        comm.Barrier()
 
 # ======================================================================
 # io helper
