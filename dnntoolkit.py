@@ -175,6 +175,7 @@ class mpi():
             if i >= len(jobs) or len(data) >= n_cache:
                 print('p=%d pos=0' % rank)
                 all_data = comm.gather(data, root=0)
+                print('p=%d pos=1' % rank)
                 if rank == 0:
                     print('Saving data at process 0')
                     all_data = [k for j in all_data for k in j]
@@ -190,7 +191,7 @@ class mpi():
             if (i + 1) % 1 == 0:
                 print('Rank:%d preprocessed %d files!' % (rank, i))
 
-        print('p=%d pos=1' % rank)
+        print('p=%d pos=2' % rank)
         all_data = comm.gather(data, root=0)
         if rank == 0:
             print('Saving data before exit !!!!\n')
