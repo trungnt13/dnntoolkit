@@ -164,7 +164,7 @@ class mpi():
         comm.Barrier()
 
         jobs = comm.scatter(jobs, root=0)
-        n_loop = comm.bcast(n_loop, root=0)
+        n_loop = comm.bcast(n_loop, root=0) + 1
         print('Process %d receive %d jobs' % (rank, len(jobs)))
 
         #####################################
@@ -176,7 +176,9 @@ class mpi():
                 all_data = comm.gather(data, root=0)
                 if rank == 0:
                     print('Saving data at process 0')
-                    save_func([k for j in all_data for k in j])
+                    all_data = [k for j in all_data for k in j]
+                    if len(all_data) > 0:
+                        save_func()
                 data = []
                 if i >= len(jobs): continue
 
@@ -190,7 +192,9 @@ class mpi():
         all_data = comm.gather(data, root=0)
         if rank == 0:
             print('Saving data before exit !!!!\n')
-            save_func([k for j in all_data for k in j])
+            all_data = [k for j in all_data for k in j]
+            if len(all_data) > 0:
+                save_func()
 
 # ======================================================================
 # io helper
