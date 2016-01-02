@@ -180,8 +180,8 @@ class mpi():
                     if len(all_data) > 0:
                         save_func(all_data)
                 data = []
-                if i >= len(jobs): continue
 
+            if i >= len(jobs): continue
             feature = features_func(jobs[i])
             if feature is not None:
                 data.append(feature)
