@@ -194,6 +194,7 @@ class mpi():
 
         print('p=%d pos=2' % rank)
         all_data = comm.gather(data, root=0)
+        comm.Barrier()
         if rank == 0:
             print('Saving data before exit !!!!\n')
             all_data = [k for j in all_data for k in j]
