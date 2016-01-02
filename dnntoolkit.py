@@ -150,7 +150,7 @@ class mpi():
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         npro = comm.Get_size()
-        comm.Barrier()
+
         #####################################
         # 1. Scatter jobs for all process.
         if rank == 0:
@@ -176,6 +176,7 @@ class mpi():
                 if rank == 3:
                     print('p=%d shit-in' % (rank))
                 all_data = comm.gather(data, root=0)
+                comm.Barrier()
                 if rank == 3:
                     print('p=%d shit-out' % (rank))
                 if rank == 0:
