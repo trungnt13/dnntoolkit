@@ -175,8 +175,8 @@ class mpi():
             if i >= len(jobs) or len(data) >= n_cache:
                 if rank == 3:
                     print('p=%d shit-in' % (rank))
-                all_data = comm.gather(data, root=0)
                 comm.Barrier()
+                all_data = comm.gather(data, root=0)
                 if rank == 3:
                     print('p=%d shit-out' % (rank))
                 if rank == 0:
