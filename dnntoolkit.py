@@ -1441,7 +1441,7 @@ class speech():
 
     @staticmethod
     def nist15_label(label, lang=False, cluster=False, within_cluster=False):
-        label = label.replace('por', 'spa')
+        label = label.replace('por-', 'spa-')
         rval = []
         if lang:
             for i, j in enumerate(speech.nist15_lang_list):
