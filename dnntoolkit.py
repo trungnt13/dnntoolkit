@@ -51,6 +51,8 @@ import soundfile
 import paramiko
 from stat import S_ISDIR
 
+
+MAGIC_SEED = 12082518
 # ======================================================================
 # Multiprocessing
 # ======================================================================
@@ -906,6 +908,61 @@ class Trainer(object):
 # ======================================================================
 # Data Preprocessing
 # ======================================================================
+def _create_batch(n_samples, batch_size, start=None, end=None, shuffle=True, seed=None):
+    '''
+    Example
+    -------
+        > _create_batch(100, 2, start=50, end=100)
+        > 3 blocks: [(50, 66), (67, 83), (84, 99)]
+        > (50,66):
+            [
+                random_permutation:[1,2,17,19,6,11,18,10,13,3,
+                                    12,7,15,0,16,5,8,4,14,9])
+                batches: [(50, 51),(52, 53),(54, 55),(56, 57),
+                          (58, 59),(60, 61),(62, 63),(64, 65),
+                          (66, 67),(68, 69)]
+            ]
+    '''
+    #####################################
+    # 1. Validate arguments.
+    if start is None:
+        start = 0
+    if end is None or end < start or end > n_samples:
+        end = n_samples
+    if start < 1.0:
+        start = int(start * n_samples)
+    if end < 1.0:
+        end = int(end * n_samples)
+    n_samples = end - start
+
+    if seed is None: # makesure all iterator give same order
+        seed = MAGIC_SEED
+    np.random.seed(seed)
+    #####################################
+    # 2. Init.
+    block_size = 8 * batch_size # load big block, then yield smaller batches
+    idx = np.arange(start, end)
+    # this will consume a lot RAM memory
+    n_block = max(int(np.ceil(n_samples / block_size)), 1)
+
+    #####################################
+    # 3. Start.
+    # ceil is safer for GPU, expected worst case of smaller number of batch size
+    block_jobs = mpi.segment_job(idx, n_block)
+    batch_jobs = []
+    for j in block_jobs:
+        n_batch = max(int(np.ceil(len(j) / batch_size)), 1)
+        job = mpi.segment_job(j, n_batch)
+        batch_jobs.append([(i[0], i[-1]) for i in job])
+    jobs = OrderedDict()
+    for i, j in izip(block_jobs, batch_jobs):
+        if shuffle:
+            idx = np.random.permutation(len(i))
+        else:
+            idx = range(len(i))
+        jobs[(i[0], i[-1])] = (idx, j)
+    return jobs
+
 class _batch(object):
 
     """docstring for _batch"""
@@ -1019,14 +1076,14 @@ class _batch(object):
             raise TypeError('Shapes not match ' + str(self.shape) + ' - ' + str(shape))
 
     # ==================== manupilation ==================== #
-    def __add__(self, other):
+    def append(self, other):
         if not isinstance(other, np.ndarray):
             raise TypeError('Addition only for numpy ndarray')
         self._check_data(other.shape, other.dtype)
         self._append_data(other)
         return self
 
-    def __mul__(self, other):
+    def duplicate(self, other):
         if not isinstance(other, int):
             raise TypeError('Only mutilply with int')
         if self._data is None:
@@ -1039,47 +1096,27 @@ class _batch(object):
     def __len__(self):
         return self._data.shape[0]
 
-    def iter(self, shuffle=True, batch_size=None):
-        block_batch = self._dataset.create_batch(self.shape[0], batch_size=batch_size)
-        for block, idx_batches in block_batch.iteritems():
-            data = self._data[block[0]:block[1] + 1]
-            batches = idx_batches[1]
-            # shuffle is performed on big block, increase reliablity and performance
-            if shuffle:
-                idx = idx_batches[0]
-                data = data[idx]
-            # return smaller batches
-            for b in batches:
-                s = b[0] - block[0]
-                e = b[1] - block[0] + 1
-                if self._dataset.normalizer is not None:
-                    yield self._dataset.normalizer(data[s:e])
-                else:
-                    yield data[s:e]
+    def iter(self, batch_size, start=None, end=None, shuffle=True, seed=None, normalizer=None):
+        block_batch = _create_batch(self.shape[0], batch_size,
+                                    start, end, shuffle, seed)
 
-    def __iter__(self):
-        block_batch = self._dataset.create_batch(self.shape[0])
         for block, idx_batches in block_batch.iteritems():
             data = self._data[block[0]:block[1] + 1]
+            idx = idx_batches[0]
             batches = idx_batches[1]
-            # shuffle is performed on big block, increase reliablity and performance
-            if self._dataset.shuffle:
-                idx = idx_batches[0]
-                data = data[idx]
+            data = data[idx]
+
             # return smaller batches
             for b in batches:
                 s = b[0] - block[0]
                 e = b[1] - block[0] + 1
-                if self._dataset.normalizer is not None:
-                    yield self._dataset.normalizer(data[s:e])
+                if normalizer is not None:
+                    yield normalizer(data[s:e])
                 else:
                     yield data[s:e]
 
     def __getitem__(self, key):
-        if self._dataset.normalizer is not None:
-            return self._dataset.normalizer(self._data[key])
-        else:
-            return self._data[key]
+        return self._data[key]
 
     def __setitem__(self, key, value):
         self._check_data(value.shape, value.dtype)
@@ -1099,7 +1136,7 @@ class dataset(object):
             def normalization(x):
                 return x.astype(np.float32)
 
-            d = dnntoolkit.dataset('tmp.hdf', 'w', normalizer=normalization, batch_size=2, shuffle=True)
+            d = dnntoolkit.dataset('tmp.hdf', 'w')
             d['X'] = np.zeros((2, 3))
             print('X' in d)
             >>> True
@@ -1142,25 +1179,14 @@ class dataset(object):
             d.close()
     '''
 
-    def __init__(self, path, mode='r', batch_size=512, normalizer=None, shuffle=True):
+    def __init__(self, path, mode='r'):
         super(dataset, self).__init__()
-        if not isinstance(batch_size, int):
-            raise TypeError('Batch size must be integer')
 
         self.hdf = h5py.File(path, mode=mode)
         self._datamap = {}
-        self.batch_size = batch_size
-        self.shuffle = shuffle # shuffle is done on each block
-
-        self.normalizer = normalizer
-        self._seed = 12082518
 
         self._start = 0
         self._end = -1
-
-    def bound(self, start=0, end=-1):
-        self._start = start
-        self._end = end
 
     # ==================== Arithmetic ==================== #
     def all_dataset(self, fileter_func=None, path='/'):
@@ -1176,36 +1202,6 @@ class dataset(object):
         return res
 
     # ==================== Main ==================== #
-    def shuffle_data(self):
-        ''' re-shuffle dataset to make sure new order come every epoch '''
-        import time
-        self._seed = int(time.time())
-
-    def create_batch(self, nb_samples, batch_size = None):
-        start = self._start
-        end = self._end
-
-        if batch_size is None:
-            batch_size = self.batch_size
-        block_size = 8 * batch_size # load big block, then yield smaller batches
-        # makesure all iterator give same order
-        np.random.seed(self._seed)
-
-        idx = np.arange(0, nb_samples) # this will consume a lot memory
-        # ceil is safer for GPU, expected worst case of smaller number of batch size
-        n_block = max(int(np.ceil(nb_samples / block_size)), 1)
-        block_jobs = mpi.segment_job(idx, n_block)
-        batch_jobs = []
-        for j in block_jobs:
-            n_batch = max(int(np.ceil(len(j) / batch_size)), 1)
-            job = mpi.segment_job(j, n_batch)
-            batch_jobs.append([(i[0], i[-1]) for i in job])
-        jobs = OrderedDict()
-        for i, j in izip(block_jobs, batch_jobs):
-            idx = np.random.permutation(len(i))
-            jobs[(i[0], i[-1])] = (idx, j)
-        return jobs
-
     def __getitem__(self, key):
         if key not in self._datamap:
             if key in self.hdf and self.hdf[key].dtype == np.dtype('O'):
