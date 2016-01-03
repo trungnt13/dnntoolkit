@@ -580,6 +580,9 @@ class model(object):
     def get_weights(self):
         return self._weights
 
+    def set_pred(self, pred_func):
+        self._pred = pred_func
+
     def set_model(self, model, api, **kwargs):
         ''' Save a function that create your model.
 
@@ -633,6 +636,17 @@ class model(object):
                         print('*** WARNING: Cannot load old weights ***')
                         print(str(e))
                         import traceback; traceback.print_exc();
+            else:
+                raise NotImplementedError()
+        return self._model
+
+    def pred(self, *X):
+        import lasagne
+        self.create_model()
+
+        # ====== Create prediction function ====== #
+        if self._pred is None:
+            if self._api == 'lasagne':
                 # create prediction function
                 input_layers = lasagne.layers.find_layers(self._model, types=lasagne.layers.InputLayer)
                 input_var = [l.input_var for l in input_layers]
@@ -642,11 +656,9 @@ class model(object):
                     allow_input_downcast=True,
                     on_unused_input=None)
             else:
-                raise NotImplementedError()
-        return self._model
+                raise NotImplementedError
 
-    def pred(self, *X):
-        self.create_model()
+        # ====== make prediction ====== #
         prediction = None
         try:
             prediction = self._pred(*X)
