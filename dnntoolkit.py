@@ -632,8 +632,10 @@ class model(object):
                         print(str(e))
                         import traceback; traceback.print_exc();
                 # create prediction function
+                input_layers = lasagne.layers.find_layers(self._model, types=lasagne.layers.InputLayer)
+                input_var = [l.input_var for l in input_layers]
                 self._pred = theano.function(
-                    inputs=lasagne.layers.find_layers(self._model, types=lasagne.layers.InputLayer),
+                    inputs=input_var,
                     outputs=lasagne.layers.get_output(self._model),
                     allow_input_downcast=True,
                     on_unused_input=None)
@@ -650,8 +652,8 @@ class model(object):
             print('*** ERROR: Cannot make prediction ***')
             if self._api == 'lasagne':
                 import lasagne
-                print('Input order:' +
-                    str(lasagne.layers.find_layers(self._model, types=lasagne.layers.InputLayer)))
+                input_layers = lasagne.layers.find_layers(self._model, types=lasagne.layers.InputLayer)
+                print('Input order:' + str([l.name for l in input_layers]))
             print(str(e))
             import traceback; traceback.print_exc();
         return prediction
