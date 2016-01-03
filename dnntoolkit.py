@@ -217,6 +217,18 @@ class io():
                 file_list.append(p)
         return file_list
 
+    @staticmethod
+    def find_in_module(module, identifier):
+        import six
+        if isinstance(module, six.string_types):
+            module = globals()[module]
+
+        from inspect import getmembers
+        for i in getmembers(module):
+            if identifier in i:
+                return i[1]
+        return None
+
 # ======================================================================
 # Array Utils
 # ======================================================================
@@ -450,12 +462,12 @@ def _is_tags_match(func, tags, absolute=False):
     '''
     Example
     -------
-    >>> tags = [1, 2, 3]
-    >>> func = [lambda x: x == 1]
-    >>> func1 = [lambda x: x == 1, lambda x: x == 2, lambda x: x == 3]
-    >>> _is_tags_match(func, tags, absolute=False) # True
-    >>> _is_tags_match(func, tags, absolute=True) # False
-    >>> _is_tags_match(func1, tags, absolute=True) # True
+        > tags = [1, 2, 3]
+        > func = [lambda x: x == 1]
+        > func1 = [lambda x: x == 1, lambda x: x == 2, lambda x: x == 3]
+        > _is_tags_match(func, tags, absolute=False) # True
+        > _is_tags_match(func, tags, absolute=True) # False
+        > _is_tags_match(func1, tags, absolute=True) # True
     '''
     for f in func:
         match = False
@@ -611,10 +623,17 @@ class model(object):
 
             if self._api == 'lasagne':
                 import lasagne
-                layers = lasagne.layers.get_all_layers(self._model)
-                i = [l.input_var for l in layers if isinstance(l, lasagne.layers.InputLayer)]
+                # load old weight
+                if len(self._weights) > 0:
+                    try:
+                        lasagne.layers.set_all_param_values(self._model, self._weights)
+                    except Exception, e:
+                        print('*** WARNING: Cannot load old weights ***')
+                        print(str(e))
+                        import traceback; traceback.print_exc();
+                # create prediction function
                 self._pred = theano.function(
-                    inputs=i,
+                    inputs=lasagne.layers.find_layers(self._model, types=lasagne.layers.InputLayer),
                     outputs=lasagne.layers.get_output(self._model),
                     allow_input_downcast=True,
                     on_unused_input=None)
@@ -624,7 +643,18 @@ class model(object):
 
     def pred(self, *X):
         self.create_model()
-        return self._pred(*X)
+        prediction = None
+        try:
+            prediction = self._pred(*X)
+        except Exception, e:
+            print('*** ERROR: Cannot make prediction ***')
+            if self._api == 'lasagne':
+                import lasagne
+                print('Input order:' +
+                    str(lasagne.layers.find_layers(self._model, types=lasagne.layers.InputLayer)))
+            print(str(e))
+            import traceback; traceback.print_exc();
+        return prediction
 
     # ==================== History manager ==================== #
     def clear(self):
@@ -732,8 +762,6 @@ class model(object):
 
         if len(history) == 0:
             return []
-        if not hasattr(tags, '__len__'):
-            tags = [tags]
         if after is None:
             after = history[0][0]
         if before is None:
