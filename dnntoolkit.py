@@ -997,12 +997,32 @@ class trainer(object):
 
     # ==================== Command ==================== #
     def stop(self):
+        ''' Stop current activity of this trainer immediatelly '''
         self._stop = True
 
     # ==================== Setter ==================== #
     def set_dataset(self, data, train=None, valid=None, test=None):
-        '''
-        Note: the order of train, valid, test must be the same in model function
+        ''' Set dataset for trainer.
+
+        Parameters
+        ----------
+        data : dnntoolkit.dataset
+            dataset instance which contain all your data
+        train : str, list(str)
+            list of dataset used for training
+        valid : str, list(str)
+            list of dataset used for validation
+        test : str, list(str)
+            list of dataset used for testing
+
+        Returns
+        -------
+        return : trainer
+            for chaining method calling
+
+        Note
+        ----
+        the order of train, valid, test must be the same in model function
         '''
         if isinstance(data, str):
             data = dataset(data, mode='r')
@@ -1028,6 +1048,26 @@ class trainer(object):
         return self
 
     def set_model(self, pred_func=None, cost_func=None, updates_func=None):
+        ''' Set main function for this trainer to manipulate your model.
+
+        Parameters
+        ----------
+        pred_func : theano.Function, function
+            prediction function: inputs=X
+                                 return: prediction
+        cost_func : theano.Function, function
+            cost function: inputs=[X,y]
+                           return: cost
+        updates_func : theano.Function, function
+            updates parameters function: inputs=[X,y]
+                                         updates: parameters
+                                         return: cost while training
+
+        Returns
+        -------
+        return : trainer
+            for chaining method calling
+        '''
         if pred_func is not None and not hasattr(pred_func, '__call__'):
            raise ValueError('pred_func must be function')
         if cost_func is not None and not hasattr(cost_func, '__call__'):
@@ -1045,7 +1085,17 @@ class trainer(object):
                      train_end=_callback,
                      valid_end=_callback,
                      test_end=_callback):
+        ''' Set Callback while training, validating or testing the model.
 
+        Parameters
+        ----------
+            all arguments is in form of:
+                def function(trainer): ...
+        Returns
+        -------
+        return : trainer
+            for chaining method calling
+        '''
         self._epoch_start = epoch_start
         self._epoch_end = epoch_end
         self._batch_start = batch_start
@@ -1057,6 +1107,37 @@ class trainer(object):
         return self
 
     def set_strategy(self, task=None, data=None, epoch=1, batch=512, validfreq=20, shuffle=True, seed=None, yaml=None):
+        ''' Set strategy for training.
+
+        Parameters
+        ----------
+        task : str
+            train, valid, or test
+        data : str, list(str), map
+            for training, data contain all training data and validation data names
+            example: [['X_train','y_train'],['X_valid','y_valid']]
+                  or {'train':['X_train','y_train'],'valid':['X_valid','y_valid']}
+            In case of missing data, strategy will take default data names form
+            set_dataset method
+        epoch : int
+            number of epoch for training (NO need for valid and test)
+        batch : int
+            number of samples for each batch
+        validfreq : int
+            validation frequency when training
+        shuffle : boolean
+            shuffle dataset while training
+        seed : int
+            set seed for shuffle so the result is reproducible
+        yaml : str
+            path to yaml strategy file. When specify this arguments,
+            all other arguments are ignored
+
+        Returns
+        -------
+        return : trainer
+            for chaining method calling
+        '''
         if yaml is not None:
             import yaml as yaml_
             f = open(yaml, 'r')
@@ -1241,6 +1322,7 @@ class trainer(object):
         self._finish_train(train_cost)
 
     def run(self):
+        ''' run specified strategies '''
         while self._current_run < len(self._strategy):
             config = self._strategy[self._current_run]
             task = config['task']
@@ -1599,6 +1681,21 @@ class dataset(object):
 
     # ==================== Arithmetic ==================== #
     def all_dataset(self, fileter_func=None, path='/'):
+        ''' Get all dataset contained in the hdf5 file.
+
+        Parameters
+        ----------
+        filter_func : function
+            filter function applied on the name of dataset to find
+            appropriate dataset
+        path : str
+            path start searching for dataset
+
+        Returns
+        -------
+        return : list(str)
+            names of all dataset
+        '''
         res = []
         for p in self.hdf[path].keys():
             p = os.path.join(path, p)
