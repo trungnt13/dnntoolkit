@@ -1,0 +1,22 @@
+- dataset: tmp1.hdf
+- task: train
+  epoch: 2
+  batch: 50
+  shuffle: True
+  seed: 12082518
+  validfreq: 25
+  data: [['X_train', 'y_train'],['X_valid', 'y_valid']]
+- task: valid
+  batch: 20
+  data: ['X_valid', 'y_valid']
+- task: test
+  batch: 30
+  data: ['X_test', 'y_test']
+- task: train
+  epoch: 2
+  batch: 50
+  shuffle: True
+  validfreq: 25
+  data:
+    train: ['X_train', 'y_train']
+    valid: ['X_valid', 'y_valid']

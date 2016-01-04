@@ -575,7 +575,7 @@ class model(object):
     def set_weights(self, weights):
         self._weights = []
         for w in weights:
-            self._weights.append(w)
+            self._weights.append(w.astype(np.float32))
 
     def get_weights(self):
         return self._weights
@@ -632,6 +632,7 @@ class model(object):
                 if len(self._weights) > 0:
                     try:
                         lasagne.layers.set_all_param_values(self._model, self._weights)
+                        print('*** INFO: successfully load old weights ***')
                     except Exception, e:
                         print('*** WARNING: Cannot load old weights ***')
                         print(str(e))
@@ -909,13 +910,408 @@ class model(object):
         f.close()
         return m
 
-class Trainer(object):
+# ======================================================================
+# Trainer
+# ======================================================================
+def _callback(trainer):
+    pass
 
-    """docstring for Trainer"""
+def _seed_generator(seed):
+    np.random.seed(seed)
+    size = 30000 # fixed size
+    random_seed = np.random.randint(0, 10e8, size=size)
+    for i in xrange(size):
+        yield random_seed[i]
 
-    def __init__(self, arg):
-        super(Trainer, self).__init__()
-        self.arg = arg
+def _parse_data_config(task, data):
+    '''return train,valid,test'''
+    train = None
+    test = None
+    valid = None
+    if type(data) in (tuple, list):
+        if type(data[0]) not in (tuple, list):
+            if 'train' in task: train = data
+            elif 'test' in task: test = data
+            elif 'valid' in task: valid = data
+        else:
+            if len(data) == 1:
+                if 'train' in task: train = data[0]
+                elif 'test' in task: test = data[0]
+                elif 'valid' in task: valid = data[0]
+            if len(data) == 2:
+                if 'train' in task: train = data[0]; valid = data[1]
+                elif 'test' in task: test = data[0]
+                elif 'valid' in task: valid = data[0]
+            elif len(data) == 3:
+                train = data[0]
+                test = data[1]
+                valid = data[2]
+    elif type(data) == dict:
+        if 'train' in data: train = data['train']
+        if 'test' in data: test = data['test']
+        if 'valid' in data: valid = data['valid']
+
+    return train, valid, test
+
+class trainer(object):
+
+    """
+    task: pretrain|train|valid|test
+    epoch: int > 0
+    earlystop:
+    layers:
+        - layer_name: configuration
+    batch: int
+    data:
+        - train: [X_train, y_train]
+        - valid: []
+    shuffle: seed(int)
+    """
+
+    def __init__(self):
+        super(trainer, self).__init__()
+        self._seed = _seed_generator(MAGIC_SEED)
+        self._strategy = []
+
+        self._train_data = None
+        self._valid_data = None
+        self._test_data = None
+
+        self._current_run = 0 # index in strategy
+
+        self.cost = None
+        self.iter = None
+        self.data = None
+        self.epoch = 0
+        self.task = None
+
+        self._epoch_start = _callback
+        self._epoch_end = _callback
+        self._batch_start = _callback
+        self._batch_end = _callback
+        self._train_end = _callback
+        self._valid_end = _callback
+        self._test_end = _callback
+
+        self._stop = False
+
+    # ==================== Command ==================== #
+    def stop(self):
+        self._stop = True
+
+    # ==================== Setter ==================== #
+    def set_dataset(self, data, train=None, valid=None, test=None):
+        '''
+        Note: the order of train, valid, test must be the same in model function
+        '''
+        if isinstance(data, str):
+            data = dataset(data, mode='r')
+        if not isinstance(data, dataset):
+            raise ValueError('[data] must be instance of dataset')
+
+        self._dataset = data
+
+        if train is not None:
+            if type(train) not in (tuple, list):
+                train = [train]
+            self._train_data = train
+
+        if valid is not None:
+            if type(valid) not in (tuple, list):
+                valid = [valid]
+            self._valid_data = valid
+
+        if test is not None:
+            if type(test) not in (tuple, list):
+                test = [test]
+            self._test_data = test
+        return self
+
+    def set_model(self, pred_func=None, cost_func=None, updates_func=None):
+        if pred_func is not None and not hasattr(pred_func, '__call__'):
+           raise ValueError('pred_func must be function')
+        if cost_func is not None and not hasattr(cost_func, '__call__'):
+           raise ValueError('cost_func must be function')
+        if updates_func is not None and not hasattr(updates_func, '__call__'):
+           raise ValueError('updates_func must be function')
+
+        self._pred_func = pred_func
+        self._cost_func = cost_func
+        self._updates_func = updates_func
+        return self
+
+    def set_callback(self, epoch_start=_callback, epoch_end=_callback,
+                     batch_start=_callback, batch_end=_callback,
+                     train_end=_callback,
+                     valid_end=_callback,
+                     test_end=_callback):
+
+        self._epoch_start = epoch_start
+        self._epoch_end = epoch_end
+        self._batch_start = batch_start
+        self._batch_end = batch_end
+
+        self._train_end = train_end
+        self._valid_end = valid_end
+        self._test_end = test_end
+        return self
+
+    def set_strategy(self, task=None, data=None, epoch=1, batch=512, validfreq=20, shuffle=True, seed=None, yaml=None):
+        if yaml is not None:
+            import yaml as yaml_
+            f = open(yaml, 'r')
+            strategy = yaml_.load(f)
+            f.close()
+            for s in strategy:
+                if 'dataset' in s:
+                    self._dataset = dataset(s['dataset'])
+                    continue
+                if 'validfreq' not in s: s['validfreq'] = validfreq
+                if 'batch' not in s: s['batch'] = batch
+                if 'epoch' not in s: s['epoch'] = epoch
+                if 'shuffle' not in s: s['shuffle'] = shuffle
+                if 'data' not in s: s['data'] = data
+                if 'seed' in s: self._seed = _seed_generator(seed)
+                self._strategy.append(s)
+            return
+
+        if task is None:
+            raise ValueError('Must specify both [task] and [data] arguments')
+
+        self._strategy.append({
+            'task': task,
+            'data': data,
+            'epoch': epoch,
+            'batch': batch,
+            'shuffle': shuffle,
+            'validfreq': validfreq
+        })
+        if seed is not None:
+            self._seed = _seed_generator(seed)
+        return self
+
+    # ==================== Logic ==================== #
+    def _early_stop(self):
+        # just a function reset stop function and return its value
+        tmp = self._stop
+        self._stop = False
+        return tmp
+
+    def _create_iter(self, names, batch, shuffle):
+        seed = self._seed.next()
+        data = [self._dataset[i].iter(batch, shuffle=shuffle, seed=seed) for i in names]
+        return enumerate(izip(*data))
+
+    def _test(self, test_data, batch):
+        self.task = 'test'
+
+        ntest = self._dataset[test_data[0]].shape[0]
+        cost = []
+        n = 0
+        for i, data in self._create_iter(test_data, batch, False):
+            n += data[0].shape[0]
+            self.data = data
+            self._batch_start(self)
+            test_cost = self._cost_func(*self.data)
+            self.data = None
+
+            if hasattr(test_cost, '__len__'):
+                cost += test_cost.tolist()
+            else:
+                cost.append(test_cost)
+
+            logger.progress(n, max_val=ntest,
+                title='Test:Cost:%.2f' % (np.mean(test_cost)),
+                newline=False)
+
+        # ====== callback ====== #
+        self.cost = cost
+        self._test_end(self) # callback
+
+        # ====== statistic of validation ====== #
+        test_mean = np.mean(self.cost)
+        test_median = np.median(self.cost)
+        test_min = np.percentile(self.cost, 5)
+        test_max = np.percentile(self.cost, 95)
+        test_var = np.var(self.cost)
+        print('Test Statistic: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+            (test_mean, test_var, test_median, test_min, test_max))
+
+        # ====== reset all flag ====== #
+        self.cost = None
+        self.task = None
+
+    def _valid(self, valid_data, batch):
+        self.task = 'valid'
+
+        nvalid = self._dataset[valid_data[0]].shape[0]
+        cost = []
+        n = 0
+        for i, data in self._create_iter(valid_data, batch, False):
+            n += data[0].shape[0]
+            self.data = data
+            self._batch_start(self)
+            valid_cost = self._cost_func(*self.data)
+            self.data = None
+
+            if hasattr(valid_cost, '__len__'):
+                cost += valid_cost.tolist()
+            else:
+                cost.append(valid_cost)
+
+            logger.progress(n, max_val=nvalid,
+                title='Valid:Cost:%.2f' % (np.mean(valid_cost)),
+                newline=False)
+
+        # ====== callback ====== #
+        self.cost = cost
+        self._valid_end(self) # callback
+
+        # ====== statistic of validation ====== #
+        valid_mean = np.mean(self.cost)
+        valid_median = np.median(self.cost)
+        valid_min = np.percentile(self.cost, 5)
+        valid_max = np.percentile(self.cost, 95)
+        valid_var = np.var(self.cost)
+        print('Validation Statistic: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+            (valid_mean, valid_var, valid_median, valid_min, valid_max))
+
+        # ====== reset all flag ====== #
+        self.cost = None
+        self.task = None
+
+    def _finish_train(self, train_cost):
+        self.cost = train_cost
+        self._train_end(self) # callback
+        self.cost = None
+        self.task = None
+
+    def _train(self, train_data, valid_data, epoch, batch, validfreq, shuffle):
+        self.task = 'train'
+
+        self.iter = 0
+        ntrain = self._dataset[train_data[0]].shape[0]
+
+        train_cost = []
+        # ====== start ====== #
+        for i in xrange(epoch):
+            self.epoch = i
+            self._epoch_start(self) # callback
+            if self._early_stop(): # earlystop
+                self._finish_train(train_cost)
+                return
+            epoch_cost = []
+            n = 0
+            # ====== start batches ====== #
+            for j, data in self._create_iter(train_data, batch, shuffle):
+                n += data[0].shape[0]
+                self.iter += 1
+                self.data = data
+                self._batch_start(self) # callback
+                cost = self._updates_func(*self.data)
+                self.data = None
+
+                # log
+                epoch_cost.append(cost)
+                train_cost.append(cost)
+                logger.progress(n, max_val=ntrain,
+                    title='Epoch:%d,Iter:%d,Cost:%.2f' % (i + 1, self.iter, cost),
+                    newline=True)
+
+                # validation
+                if self.iter > 0 and self.iter % validfreq == 0:
+                    if valid_data is not None:
+                        self._valid(valid_data, batch)
+                        if self._early_stop(): # earlystop
+                            self._finish_train(train_cost)
+                            return
+                    self.task = 'train' # restart flag back to train
+                self._batch_end(self)  # callback
+                if self._early_stop(): # earlystop
+                    self._finish_train(train_cost)
+                    return
+
+            self.cost = epoch_cost
+            self._epoch_end(self) # callback
+            self.cost = None
+            if self._early_stop(): # earlystop
+                self._finish_train(train_cost)
+                return
+
+        self._finish_train(train_cost)
+
+    def run(self):
+        while self._current_run < len(self._strategy):
+            config = self._strategy[self._current_run]
+            task = config['task']
+            train, valid, test = _parse_data_config(task, config['data'])
+            if train is None: train = self._train_data
+            if test is None: test = self._test_data
+            if valid is None: valid = self._valid_data
+
+            epoch = config['epoch']
+            batch = config['batch']
+            validfreq = config['validfreq']
+            shuffle = config['shuffle']
+
+            self._current_run += 1
+            print('\n******* %d-th run, with configuration: *******' % self._current_run)
+            print(' - Task:%s' % task)
+            print(' - Train data:%s' % str(train))
+            print(' - Valid data:%s' % str(valid))
+            print(' - Test data:%s' % str(test))
+            print(' - Epoch:%d' % epoch)
+            print(' - Batch:%d' % batch)
+            print(' - Validfreq:%d' % validfreq)
+            print(' - Shuffle:%s' % str(shuffle))
+            print('**********************************************')
+
+            if 'train' in task:
+                self._train(train, valid, epoch, batch, validfreq, shuffle)
+            elif 'valid' in task:
+                self._valid(valid, batch)
+            elif 'test' in task:
+                self._test(test, batch)
+
+    # ==================== Debug ==================== #
+    def __str__(self):
+        s = '\n'
+        s += 'Dataset:' + str(self._dataset) + '\n'
+        s += 'Current run:%d' % self._current_run + '\n'
+        s += '============ \n'
+        s += 'defTrain:' + str(self._train_data) + '\n'
+        s += 'defValid:' + str(self._valid_data) + '\n'
+        s += 'defTest:' + str(self._test_data) + '\n'
+        s += '============ \n'
+        s += 'Pred_func:' + str(self._pred_func) + '\n'
+        s += 'Cost_func:' + str(self._cost_func) + '\n'
+        s += 'Updates_func:' + str(self._updates_func) + '\n'
+        s += '============ \n'
+        s += 'Epoch start:' + str(self._epoch_start) + '\n'
+        s += 'Epoch end:' + str(self._epoch_end) + '\n'
+        s += 'Batch start:' + str(self._batch_start) + '\n'
+        s += 'Batch end:' + str(self._batch_end) + '\n'
+        s += 'Train end:' + str(self._train_end) + '\n'
+        s += 'Valid end:' + str(self._valid_end) + '\n'
+        s += 'Test end:' + str(self._test_end) + '\n'
+
+        for i, st in enumerate(self._strategy):
+            train, valid, test = _parse_data_config(st['task'], st['data'])
+            if train is None: train = self._train_data
+            if test is None: test = self._test_data
+            if valid is None: valid = self._valid_data
+
+            s += '====== Strategy %d-th ======\n' % (i + 1)
+            s += ' - Task:%s' % st['task'] + '\n'
+            s += ' - Train:%s' % str(train) + '\n'
+            s += ' - Valid:%s' % str(valid) + '\n'
+            s += ' - Test:%s' % str(test) + '\n'
+            s += ' - Epoch:%d' % st['epoch'] + '\n'
+            s += ' - Batch:%d' % st['batch'] + '\n'
+            s += ' - Shuffle:%s' % st['shuffle'] + '\n'
+
+        return s
+
 
 # ======================================================================
 # Data Preprocessing
@@ -1195,6 +1591,7 @@ class dataset(object):
         super(dataset, self).__init__()
 
         self.hdf = h5py.File(path, mode=mode)
+        self._path = path
         self._datamap = {}
 
         self._start = 0
@@ -1247,6 +1644,16 @@ class dataset(object):
             del self.hdf
         except:
             pass
+
+    def __str__(self):
+        all_data = self.all_dataset()
+        all_data = [(d, str(self.hdf[d].shape), str(self.hdf[d].dtype)) for d in all_data]
+        s = '\n'
+        s += ' - path:' + str(self._path) + '\n'
+        for i in all_data:
+            s += ' - name:%s  shape:%s  dtype:%s' % i + '\n'
+        return s
+
 # ======================================================================
 # Visualiztion
 # ======================================================================
