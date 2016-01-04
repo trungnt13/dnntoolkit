@@ -674,7 +674,7 @@ class model(object):
         return prediction
 
     # ==================== History manager ==================== #
-    def clear(self):
+    def reset_history(self):
         self._history = []
 
     def record(self, values, *tags):
@@ -756,7 +756,7 @@ class model(object):
             after < t < before
         n : int
             number of record return
-        filter_value : function
+        filter_value : function(value)
             function to filter each value found
         absolute : boolean
             whether required the same set of tags or just contain
@@ -889,23 +889,39 @@ class model(object):
         m._save_path = path
 
         f = h5py.File(path, 'r')
-        m._history = cPickle.loads(f['history'].value)
+        if 'history' in f:
+            m._history = cPickle.loads(f['history'].value)
+        else:
+            m._history = []
 
-        m._api = f['api'].value
-        m._model_name = f['model_name'].value
-        m._model_args = cPickle.loads(f['model_args'].value)
-        m._sandbox = cPickle.loads(f['sandbox'].value)
-        globals()[m._api] = __import__(m._api)
-        for k, v in m._sandbox.iteritems():
-            globals()[k] = v
+        if 'api' in f:
+            m._api = f['api'].value
+        else: m._api = None
+        if 'model_name' in f:
+            m._model_name = f['model_name'].value
+        else: m._model_name = None
+        if 'model_args' in f:
+            m._model_args = cPickle.loads(f['model_args'].value)
+        else: m._model_args = None
+        if 'sandbox' in f:
+            m._sandbox = cPickle.loads(f['sandbox'].value)
+        else: m._sandbox = None
 
-        b = cPickle.loads(f['model_func'].value)
-        m._model_func = marshal.loads(b.tostring())
-        m._model_func = types.FunctionType(m._model_func, globals(), m._model_name)
+        if m._api is not None and m._sandbox is not None:
+            globals()[m._api] = __import__(m._api)
+            for k, v in m._sandbox.iteritems():
+                globals()[k] = v
+
+        if 'model_func' in f:
+            b = cPickle.loads(f['model_func'].value)
+            m._model_func = marshal.loads(b.tostring())
+            m._model_func = types.FunctionType(m._model_func, globals(), m._model_name)
+        else: m._model_func = None
 
         m._weights = []
-        for i in xrange(f['nb_weights'].value):
-            m._weights.append(f['weight_%d' % i].value)
+        if 'nb_weights' in f:
+            for i in xrange(f['nb_weights'].value):
+                m._weights.append(f['weight_%d' % i].value)
 
         f.close()
         return m
@@ -956,16 +972,13 @@ def _parse_data_config(task, data):
 class trainer(object):
 
     """
-    task: pretrain|train|valid|test
-    epoch: int > 0
-    earlystop:
-    layers:
-        - layer_name: configuration
-    batch: int
-    data:
-        - train: [X_train, y_train]
-        - valid: []
-    shuffle: seed(int)
+    Value can be queried on callback:
+        idx: current run idx in the strategies
+        cost: current training, testing, validating cost
+        iter: number of iteration
+        data: current data (batch_start)
+        epoch: current epoch
+        task: current task
     """
 
     def __init__(self):
@@ -977,8 +990,7 @@ class trainer(object):
         self._valid_data = None
         self._test_data = None
 
-        self._current_run = 0 # index in strategy
-
+        self.idx = 0 # index in strategy
         self.cost = None
         self.iter = None
         self.data = None
@@ -1189,9 +1201,11 @@ class trainer(object):
         ntest = self._dataset[test_data[0]].shape[0]
         cost = []
         n = 0
+        it = 0
         for i, data in self._create_iter(test_data, batch, False):
             n += data[0].shape[0]
             self.data = data
+            self.iter = it
             self._batch_start(self)
             test_cost = self._cost_func(*self.data)
             self.data = None
@@ -1204,6 +1218,11 @@ class trainer(object):
             logger.progress(n, max_val=ntest,
                 title='Test:Cost:%.2f' % (np.mean(test_cost)),
                 newline=False)
+
+            self.cost = cost
+            self.iter = it
+            self._batch_end(self)
+            self.cost = None
 
         # ====== callback ====== #
         self.cost = cost
@@ -1221,6 +1240,7 @@ class trainer(object):
         # ====== reset all flag ====== #
         self.cost = None
         self.task = None
+        self.iter = 0
 
     def _valid(self, valid_data, batch):
         self.task = 'valid'
@@ -1228,9 +1248,12 @@ class trainer(object):
         nvalid = self._dataset[valid_data[0]].shape[0]
         cost = []
         n = 0
+        it = 0
         for i, data in self._create_iter(valid_data, batch, False):
+            it += 1
             n += data[0].shape[0]
             self.data = data
+            self.iter = it
             self._batch_start(self)
             valid_cost = self._cost_func(*self.data)
             self.data = None
@@ -1243,6 +1266,11 @@ class trainer(object):
             logger.progress(n, max_val=nvalid,
                 title='Valid:Cost:%.2f' % (np.mean(valid_cost)),
                 newline=False)
+
+            self.cost = cost
+            self.iter = it
+            self._batch_end(self)
+            self.cost = None
 
         # ====== callback ====== #
         self.cost = cost
@@ -1260,23 +1288,27 @@ class trainer(object):
         # ====== reset all flag ====== #
         self.cost = None
         self.task = None
+        self.iter = 0
 
     def _finish_train(self, train_cost):
         self.cost = train_cost
         self._train_end(self) # callback
         self.cost = None
         self.task = None
+        self.it = 0
 
     def _train(self, train_data, valid_data, epoch, batch, validfreq, shuffle):
         self.task = 'train'
 
         self.iter = 0
+        it = 0
         ntrain = self._dataset[train_data[0]].shape[0]
 
         train_cost = []
         # ====== start ====== #
         for i in xrange(epoch):
             self.epoch = i
+            self.iter = it
             self._epoch_start(self) # callback
             if self._early_stop(): # earlystop
                 self._finish_train(train_cost)
@@ -1286,8 +1318,9 @@ class trainer(object):
             # ====== start batches ====== #
             for j, data in self._create_iter(train_data, batch, shuffle):
                 n += data[0].shape[0]
-                self.iter += 1
+                it += 1
                 self.data = data
+                self.iter = it
                 self._batch_start(self) # callback
                 cost = self._updates_func(*self.data)
                 self.data = None
@@ -1296,35 +1329,43 @@ class trainer(object):
                 epoch_cost.append(cost)
                 train_cost.append(cost)
                 logger.progress(n, max_val=ntrain,
-                    title='Epoch:%d,Iter:%d,Cost:%.2f' % (i + 1, self.iter, cost),
-                    newline=True)
+                    title='Epoch:%d,Iter:%d,Cost:%.2f' % (i + 1, it, cost),
+                    newline=False)
+
+                # end batch
+                self.cost = cost
+                self.iter = it
+                self._batch_end(self)  # callback
+                self.cost = None
+                if self._early_stop(): # earlystop
+                    self._finish_train(train_cost)
+                    return
 
                 # validation
-                if self.iter > 0 and self.iter % validfreq == 0:
+                if it > 0 and it % validfreq == 0:
                     if valid_data is not None:
                         self._valid(valid_data, batch)
                         if self._early_stop(): # earlystop
                             self._finish_train(train_cost)
                             return
                     self.task = 'train' # restart flag back to train
-                self._batch_end(self)  # callback
-                if self._early_stop(): # earlystop
-                    self._finish_train(train_cost)
-                    return
 
+            # end epoch
             self.cost = epoch_cost
+            self.iter = it
             self._epoch_end(self) # callback
             self.cost = None
             if self._early_stop(): # earlystop
                 self._finish_train(train_cost)
                 return
 
+        # end training
         self._finish_train(train_cost)
 
     def run(self):
         ''' run specified strategies '''
-        while self._current_run < len(self._strategy):
-            config = self._strategy[self._current_run]
+        while self.idx < len(self._strategy):
+            config = self._strategy[self.idx]
             task = config['task']
             train, valid, test = _parse_data_config(task, config['data'])
             if train is None: train = self._train_data
@@ -1336,8 +1377,8 @@ class trainer(object):
             validfreq = config['validfreq']
             shuffle = config['shuffle']
 
-            self._current_run += 1
-            print('\n******* %d-th run, with configuration: *******' % self._current_run)
+            self.idx += 1
+            print('\n******* %d-th run, with configuration: *******' % self.idx)
             print(' - Task:%s' % task)
             print(' - Train data:%s' % str(train))
             print(' - Valid data:%s' % str(valid))
@@ -1359,7 +1400,7 @@ class trainer(object):
     def __str__(self):
         s = '\n'
         s += 'Dataset:' + str(self._dataset) + '\n'
-        s += 'Current run:%d' % self._current_run + '\n'
+        s += 'Current run:%d' % self.idx + '\n'
         s += '============ \n'
         s += 'defTrain:' + str(self._train_data) + '\n'
         s += 'defValid:' + str(self._valid_data) + '\n'

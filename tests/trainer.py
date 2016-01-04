@@ -62,6 +62,7 @@ ds.close()
 ds = dnntoolkit.dataset('tmp.hdf', mode='r')
 
 m = dnntoolkit.model.load('tmp.ai')
+m.reset_history()
 m.set_model(models.ffnet, api='lasagne', dim=dim, k=k, hid=30)
 net = m.create_model()
 
@@ -123,9 +124,11 @@ def epoch_end(trainer):
     print('epoch end: task:%s' % (trainer.task))
     pass
 def batch_start(trainer):
+    m.record(None, trainer.task, 'batch_start')
     # print('batch start')
     pass
 def batch_end(trainer):
+    m.record(np.mean(trainer.cost), trainer.task, trainer.idx)
     # print('batch end')
     pass
 def valid_end(trainer):
@@ -146,9 +149,9 @@ trainer.set_callback(epoch_start=epoch_start, epoch_end=epoch_end,
 print(trainer)
 trainer.run()
 
-trainer.set_strategy(yaml='tmp.yaml')
-print(trainer)
-trainer.run()
+# trainer.set_strategy(yaml='tmp.yaml')
+# print(trainer)
+# trainer.run()
 # ======================================================================
 # End
 # ======================================================================
