@@ -1293,12 +1293,12 @@ class trainer(object):
             self._batch_start(self)
             cost = self._cost_func(*self.data)
             self.data = None
-            print(cost)
+
             if hasattr(cost, '__len__'):
                 valid_cost += cost.tolist()
             else:
                 valid_cost.append(cost)
-            print(valid_cost)
+
             logger.progress(n, max_val=nvalid,
                 title='Valid:Cost:%.2f' % (np.mean(cost)),
                 newline=False)
@@ -1309,6 +1309,7 @@ class trainer(object):
             self.cost = None
 
         # ====== callback ====== #
+        print(valid_cost)
         self.cost = valid_cost
         self._valid_end(self) # callback
 
