@@ -75,15 +75,24 @@ source deactivate
 # Interactive
 # ======================================================================
 #srun -N 1 -p gpu -t 30 --gres=gpu:1 --pty $SHELL -l
-def igpu(t, n_gpu, mem):
+def igpu(t, n, mem=15000):
     arch = 'gpu'
     if t <= 15:
         arch = 'gputest'
 
-    n = int(math.ceil(n_gpu / 2))
-    n_gpu = 2
+    N = int(math.ceil(n / 2))
 
-    print('srun -N %d -p %s -t %d --gres=gpu:2 --pty $SHELL -l' % (n, arch, t))
+    os.system('srun -N %d -p %s -t %d --gres=gpu:2 --mem=%d --pty $SHELL -l' % (N, arch, t, mem))
+
+def icpu(t, n, mem=15000):
+    N = int(math.ceil(n / 16))
+    arch = 'serial'
+    if t <= 15:
+        arch = 'test'
+    elif N > 1:
+        arch = 'parallel'
+    mem = mem / n
+    os.system('srun -N %d --ntasks=%d -p %s -t %d --mem=%d --pty $SHELL -l' % (N, n, arch, t, mem))
 
 # ======================================================================
 # SLURM creator
