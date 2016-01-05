@@ -1235,7 +1235,7 @@ class trainer(object):
         self.task = 'test'
 
         ntest = self._dataset[test_data[0]].shape[0]
-        cost = []
+        test_cost = []
         n = 0
         it = 0
         for i, data in self._create_iter(test_data, batch, False):
@@ -1243,16 +1243,16 @@ class trainer(object):
             self.data = data
             self.iter = it
             self._batch_start(self)
-            test_cost = self._cost_func(*self.data)
+            cost = self._cost_func(*self.data)
             self.data = None
 
-            if hasattr(test_cost, '__len__'):
-                cost += test_cost.tolist()
+            if hasattr(cost, '__len__'):
+                test_cost += cost.tolist()
             else:
-                cost.append(test_cost)
+                test_cost.append(cost)
 
             logger.progress(n, max_val=ntest,
-                title='Test:Cost:%.2f' % (np.mean(test_cost)),
+                title='Test:Cost:%.2f' % (np.mean(cost)),
                 newline=False)
 
             self.cost = cost
@@ -1261,7 +1261,7 @@ class trainer(object):
             self.cost = None
 
         # ====== callback ====== #
-        self.cost = cost
+        self.cost = test_cost
         self._test_end(self) # callback
 
         # ====== statistic of validation ====== #
