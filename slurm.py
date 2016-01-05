@@ -71,6 +71,19 @@ source activate ai-cpu
 
 source deactivate
 """
+# ======================================================================
+# Interactive
+# ======================================================================
+#srun -N 1 -p gpu -t 30 --gres=gpu:1 --pty $SHELL -l
+def igpu(t, n_gpu, mem):
+    arch = 'gpu'
+    if t <= 15:
+        arch = 'gputest'
+
+    n = int(math.ceil(n_gpu / 2))
+    n_gpu = 2
+
+    print('srun -N %d -p %s -t %d --gres=gpu:2 --pty $SHELL -l' % (n, arch, t))
 
 # ======================================================================
 # SLURM creator
