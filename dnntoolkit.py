@@ -475,7 +475,7 @@ def _check_gs(validation):
 
     return shouldSave, shouldStop
 
-def _check_gl(validation, threshold=3):
+def _check_gl(validation, threshold=5):
     ''' Generalization loss:
     validation is list of cost values (assumpt: lower is better)
     '''
@@ -1013,6 +1013,7 @@ def _parse_data_config(task, data):
 class trainer(object):
 
     """
+    TODO: request validation function
     Value can be queried on callback:
         idx: current run idx in the strategies
         cost: current training, testing, validating cost
@@ -1281,7 +1282,7 @@ class trainer(object):
         self.task = 'valid'
 
         nvalid = self._dataset[valid_data[0]].shape[0]
-        cost = []
+        valid_cost = []
         n = 0
         it = 0
         for i, data in self._create_iter(valid_data, batch, False):
@@ -1290,16 +1291,16 @@ class trainer(object):
             self.data = data
             self.iter = it
             self._batch_start(self)
-            valid_cost = self._cost_func(*self.data)
+            cost = self._cost_func(*self.data)
             self.data = None
 
-            if hasattr(valid_cost, '__len__'):
-                cost += valid_cost.tolist()
+            if hasattr(cost, '__len__'):
+                valid_cost += valid_cost.tolist()
             else:
-                cost.append(valid_cost)
+                valid_cost.append(cost)
 
             logger.progress(n, max_val=nvalid,
-                title='Valid:Cost:%.2f' % (np.mean(valid_cost)),
+                title='Valid:Cost:%.2f' % (np.mean(cost)),
                 newline=False)
 
             self.cost = cost
@@ -1308,7 +1309,7 @@ class trainer(object):
             self.cost = None
 
         # ====== callback ====== #
-        self.cost = cost
+        self.cost = valid_cost
         self._valid_end(self) # callback
 
         # ====== statistic of validation ====== #
@@ -1365,7 +1366,7 @@ class trainer(object):
                 train_cost.append(cost)
                 logger.progress(n, max_val=ntrain,
                     title='Epoch:%d,Iter:%d,Cost:%.2f' % (i + 1, it, cost),
-                    newline=False)
+                    newline=True)
 
                 # end batch
                 self.cost = cost
