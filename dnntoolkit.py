@@ -455,32 +455,12 @@ class GPU():
     }
 
 # ======================================================================
-# Model
+# Early stop
 # ======================================================================
-def _create_comparator(t):
-    return lambda x: x == t
-
-def _is_tags_match(func, tags, absolute=False):
-    '''
-    Example
-    -------
-        > tags = [1, 2, 3]
-        > func = [lambda x: x == 1]
-        > func1 = [lambda x: x == 1, lambda x: x == 2, lambda x: x == 3]
-        > _is_tags_match(func, tags, absolute=False) # True
-        > _is_tags_match(func, tags, absolute=True) # False
-        > _is_tags_match(func1, tags, absolute=True) # True
-    '''
-    for f in func:
-        match = False
-        for t in tags:
-            match |= f(t)
-        if not match: return False
-    if absolute and len(func) != len(tags):
-        return False
-    return True
-
 def _check_gs(validation):
+    ''' Generalization sensitive:
+    validation is list of cost values (assumpt: lower is better)
+    '''
     if len(validation) == 0:
         return 0, 0
     shouldStop = 0
@@ -495,8 +475,11 @@ def _check_gs(validation):
 
     return shouldSave, shouldStop
 
-def _check_gl(validation):
-    gl_exit_threshold = 3
+def _check_gl(validation, threshold=3):
+    ''' Generalization loss:
+    validation is list of cost values (assumpt: lower is better)
+    '''
+    gl_exit_threshold = threshold
 
     if len(validation) == 0:
         return 0, 0
@@ -515,6 +498,9 @@ def _check_gl(validation):
 
 
 def _check_hope_and_hop(validation):
+    ''' Hope and hop:
+    validation is list of cost values (assumpt: lower is better)
+    '''
     patience = 5
     patience_increase = 0.5
     improvement_threshold = 0.998
@@ -550,6 +536,71 @@ def _check_hope_and_hop(validation):
         shouldStop = 1
         shouldSave = -1
     return shouldSave, shouldStop
+
+# ====== early stop ====== #
+def earlystop(costs, generalization_loss = False, generalization_sensitive=False, hope_hop=False, threshold=None):
+    ''' Early stop.
+
+    Parameters
+    ----------
+    generalization_loss : type
+        note
+    generalization_sensitive : type
+        note
+    hope_hop : type
+        note
+
+    Returns
+    -------
+    return : boolean, boolean
+        shouldSave, shouldStop
+
+    '''
+    values = costs
+    shouldSave = 0
+    shouldStop = 0
+    if generalization_loss:
+        if threshold is not None:
+            save, stop = _check_gl(values, threshold)
+        else:
+            save, stop = _check_gl(values)
+        shouldSave += save
+        shouldStop += stop
+    if generalization_sensitive:
+        save, stop = _check_gs(values)
+        shouldSave += save
+        shouldStop += stop
+    if hope_hop:
+        save, stop = _check_hope_and_hop(values)
+        shouldSave += save
+        shouldStop += stop
+    return shouldSave > 0, shouldStop > 0
+
+# ======================================================================
+# Model
+# ======================================================================
+def _create_comparator(t):
+    return lambda x: x == t
+
+def _is_tags_match(func, tags, absolute=False):
+    '''
+    Example
+    -------
+        > tags = [1, 2, 3]
+        > func = [lambda x: x == 1]
+        > func1 = [lambda x: x == 1, lambda x: x == 2, lambda x: x == 3]
+        > _is_tags_match(func, tags, absolute=False) # True
+        > _is_tags_match(func, tags, absolute=True) # False
+        > _is_tags_match(func1, tags, absolute=True) # True
+    '''
+    for f in func:
+        match = False
+        for t in tags:
+            match |= f(t)
+        if not match: return False
+    if absolute and len(func) != len(tags):
+        return False
+    return True
 
 # TODO: Add implementation for loading the whole models
 class model(object):
@@ -624,6 +675,7 @@ class model(object):
         if self._model is None:
             func = self._model_func
             args = self._model_args
+            print('*** INFO: creating network ... ***')
             self._model = func(**args)
 
             if self._api == 'lasagne':
@@ -653,7 +705,7 @@ class model(object):
                 input_var = [l.input_var for l in input_layers]
                 self._pred = theano.function(
                     inputs=input_var,
-                    outputs=lasagne.layers.get_output(self._model),
+                    outputs=lasagne.layers.get_output(self._model, deterministic=True),
                     allow_input_downcast=True,
                     on_unused_input=None)
             else:
@@ -691,13 +743,15 @@ class model(object):
 
         self._history.append([curr_time, tags, values])
 
-    def update(self, tags, func, after=None, before=None, n=None, absolute=False):
+    def update(self, tags, new, after=None, before=None, n=None, absolute=False):
         ''' Apply a funciton to all selected value
 
         Parameters
         ----------
         tags : list, str, filter function or any comparable object
             get all values contain given tags
+        new : function, object, values
+            update new values
         after, before : time constraint (in millisecond)
             after < t < before
         n : int
@@ -740,12 +794,16 @@ class model(object):
             if not _is_tags_match(tags, row[1], absolute):
                 continue
             # check value
-            row[2] = func(row[2])
+            if hasattr(new, '__call__'):
+                row[2] = new(row[2])
+            else:
+                row[2] = new
             count += 1
 
-    def select(self, tags, after=None, before=None, n=None,
+    def select(self, tags, default=None,
+        after=None, before=None, n=None,
         filter_value=None, absolute=False,
-        newest_first=False, return_time=False):
+        newest=False, time=False):
         ''' Query in history
 
         Parameters
@@ -760,15 +818,15 @@ class model(object):
             function to filter each value found
         absolute : boolean
             whether required the same set of tags or just contain
-        newest_first : boolean
-            returning order
-        return_time : boolean
+        newest : boolean
+            returning order (newest first, default is False)
+        time : boolean
             whether return time tags
 
         Returns
         -------
         return : list
-            list of all values found
+            always return list, in case of no value, return empty list
         '''
         # ====== preprocess arguments ====== #
         history = self._history
@@ -807,11 +865,14 @@ class model(object):
             res.append((time, val))
 
         # ====== return results ====== #
-        if not return_time:
+        if not time:
             res = [i[1] for i in res]
 
-        if newest_first:
+        if newest:
             return list(reversed(res))
+
+        if len(res) == 0 and default is not None:
+            return default
         return res
 
     # ==================== pretty print ==================== #
@@ -827,26 +888,6 @@ class model(object):
         for row in self._history:
             row = tuple([str(i) for i in row])
             print(fmt % row)
-
-    # ====== early stop ====== #
-    def earlystop(self, tags, generalization_lost = False, generalization_sensitive=False, hope_hop=False):
-        values = self.select(tags)
-        values = [np.mean(i) if hasattr(i, '__len__') else i for i in values]
-        shouldSave = 0
-        shouldStop = 0
-        if generalization_lost:
-            save, stop = _check_gl(values)
-            shouldSave += save
-            shouldStop += stop
-        if generalization_sensitive:
-            save, stop = _check_gs(values)
-            shouldSave += save
-            shouldStop += stop
-        if hope_hop:
-            save, stop = _check_hope_and_hop(values)
-            shouldSave += save
-            shouldStop += stop
-        return shouldSave > 0, shouldStop > 0
 
     # ==================== Load & Save ==================== #
     def save(self, path=None):
@@ -1059,14 +1100,11 @@ class trainer(object):
             self._test_data = test
         return self
 
-    def set_model(self, pred_func=None, cost_func=None, updates_func=None):
+    def set_model(self, cost_func=None, updates_func=None):
         ''' Set main function for this trainer to manipulate your model.
 
         Parameters
         ----------
-        pred_func : theano.Function, function
-            prediction function: inputs=X
-                                 return: prediction
         cost_func : theano.Function, function
             cost function: inputs=[X,y]
                            return: cost
@@ -1080,14 +1118,11 @@ class trainer(object):
         return : trainer
             for chaining method calling
         '''
-        if pred_func is not None and not hasattr(pred_func, '__call__'):
-           raise ValueError('pred_func must be function')
         if cost_func is not None and not hasattr(cost_func, '__call__'):
            raise ValueError('cost_func must be function')
         if updates_func is not None and not hasattr(updates_func, '__call__'):
            raise ValueError('updates_func must be function')
 
-        self._pred_func = pred_func
         self._cost_func = cost_func
         self._updates_func = updates_func
         return self
@@ -1390,11 +1425,20 @@ class trainer(object):
             print('**********************************************')
 
             if 'train' in task:
-                self._train(train, valid, epoch, batch, validfreq, shuffle)
+                if train is None:
+                    print('*** WARNING: no TRAIN data found, ignored **')
+                else:
+                    self._train(train, valid, epoch, batch, validfreq, shuffle)
             elif 'valid' in task:
-                self._valid(valid, batch)
+                if valid is None:
+                    print('*** WARNING: no VALID data found, ignored **')
+                else:
+                    self._valid(valid, batch)
             elif 'test' in task:
-                self._test(test, batch)
+                if test is None:
+                    print('*** WARNING: no TEST data found, ignored **')
+                else:
+                    self._test(test, batch)
 
     # ==================== Debug ==================== #
     def __str__(self):
@@ -1406,7 +1450,6 @@ class trainer(object):
         s += 'defValid:' + str(self._valid_data) + '\n'
         s += 'defTest:' + str(self._test_data) + '\n'
         s += '============ \n'
-        s += 'Pred_func:' + str(self._pred_func) + '\n'
         s += 'Cost_func:' + str(self._cost_func) + '\n'
         s += 'Updates_func:' + str(self._updates_func) + '\n'
         s += '============ \n'

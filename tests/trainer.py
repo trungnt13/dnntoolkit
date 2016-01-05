@@ -98,7 +98,7 @@ f_updates = theano.function(
 # ======================================================================
 trainer = dnntoolkit.trainer()
 trainer.set_dataset(ds, test=['X_test', 'y_test'])
-trainer.set_model(pred_func=f_pred, cost_func=f_cost, updates_func=f_updates)
+trainer.set_model(cost_func=f_cost, updates_func=f_updates)
 trainer.set_strategy(
     task='train',
     data={'train': ['X_train', 'y_train'], 'valid': ['X_valid', 'y_valid']},
