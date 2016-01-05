@@ -1295,7 +1295,7 @@ class trainer(object):
             self.data = None
 
             if hasattr(cost, '__len__'):
-                valid_cost += valid_cost.tolist()
+                valid_cost += cost.tolist()
             else:
                 valid_cost.append(cost)
 
