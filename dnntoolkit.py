@@ -1171,8 +1171,9 @@ class trainer(object):
             number of epoch for training (NO need for valid and test)
         batch : int
             number of samples for each batch
-        validfreq : int
-            validation frequency when training
+        validfreq : int, float(0.-1.)
+            validation frequency when training, when float, it mean percentage
+            of dataset
         shuffle : boolean
             shuffle dataset while training
         seed : int
@@ -1339,7 +1340,7 @@ class trainer(object):
         self.iter = 0
         it = 0
         ntrain = self._dataset[train_data[0]].shape[0]
-        if validfreq < 1.0:
+        if validfreq < 1.0: # validate validfreq
             validfreq = int(validfreq * ntrain / batch)
         train_cost = []
         # ====== start ====== #
