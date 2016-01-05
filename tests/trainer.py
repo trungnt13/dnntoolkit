@@ -128,8 +128,8 @@ def batch_start(trainer):
     # print('batch start')
     pass
 def batch_end(trainer):
+    print('batch end', '-', trainer.task)
     m.record(np.mean(trainer.cost), trainer.task, trainer.idx)
-    # print('batch end')
     pass
 def valid_end(trainer):
     print('valid end: ')
