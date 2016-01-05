@@ -1298,7 +1298,7 @@ class trainer(object):
                 valid_cost += cost.tolist()
             else:
                 valid_cost.append(cost)
-
+            print(valid_cost)
             logger.progress(n, max_val=nvalid,
                 title='Valid:Cost:%.2f' % (np.mean(cost)),
                 newline=False)
