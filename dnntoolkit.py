@@ -1245,7 +1245,6 @@ class trainer(object):
             self.iter = it
             self._batch_start(self)
             cost = self._cost_func(*self.data)
-            self.data = None
 
             if hasattr(cost, '__len__'):
                 test_cost += cost.tolist()
@@ -1259,6 +1258,7 @@ class trainer(object):
             self.cost = cost
             self.iter = it
             self._batch_end(self)
+            self.data = None
             self.cost = None
 
         # ====== callback ====== #
@@ -1293,7 +1293,6 @@ class trainer(object):
             self.iter = it
             self._batch_start(self)
             cost = self._cost_func(*self.data)
-            self.data = None
 
             if hasattr(cost, '__len__'):
                 valid_cost += cost.tolist()
@@ -1307,6 +1306,7 @@ class trainer(object):
             self.cost = cost
             self.iter = it
             self._batch_end(self)
+            self.data = None
             self.cost = None
 
         # ====== callback ====== #
@@ -1361,7 +1361,6 @@ class trainer(object):
                 self.iter = it
                 self._batch_start(self) # callback
                 cost = self._updates_func(*self.data)
-                self.data = None
 
                 # log
                 epoch_cost.append(cost)
@@ -1374,6 +1373,7 @@ class trainer(object):
                 self.cost = cost
                 self.iter = it
                 self._batch_end(self)  # callback
+                self.data = None
                 self.cost = None
                 if self._early_stop(): # earlystop
                     self._finish_train(train_cost)
