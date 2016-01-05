@@ -803,7 +803,7 @@ class model(object):
     def select(self, tags, default=None,
         after=None, before=None, n=None,
         filter_value=None, absolute=False,
-        newest=False, time=False):
+        newest=False, return_time=False):
         ''' Query in history
 
         Parameters
@@ -865,7 +865,7 @@ class model(object):
             res.append((time, val))
 
         # ====== return results ====== #
-        if not time:
+        if not return_time:
             res = [i[1] for i in res]
 
         if newest:
