@@ -1293,7 +1293,7 @@ class trainer(object):
             self._batch_start(self)
             cost = self._cost_func(*self.data)
             self.data = None
-            print(cost)
+
             if hasattr(cost, '__len__'):
                 valid_cost += cost.tolist()
             else:
