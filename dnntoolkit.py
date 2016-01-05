@@ -1339,7 +1339,8 @@ class trainer(object):
         self.iter = 0
         it = 0
         ntrain = self._dataset[train_data[0]].shape[0]
-
+        if validfreq < 1.0:
+            validfreq = int(validfreq * ntrain / batch)
         train_cost = []
         # ====== start ====== #
         for i in xrange(epoch):
