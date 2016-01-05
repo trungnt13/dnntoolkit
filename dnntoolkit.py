@@ -1309,8 +1309,6 @@ class trainer(object):
             self.cost = None
 
         # ====== callback ====== #
-        print(valid_cost)
-        print(len(valid_cost))
         self.cost = valid_cost
         self._valid_end(self) # callback
 
