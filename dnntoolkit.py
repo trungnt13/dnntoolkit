@@ -1673,10 +1673,10 @@ class _batch(object):
     def __len__(self):
         return self._data.shape[0]
 
-    def iter(self, batch_size, start=None, end=None, shuffle=True, seed=None, normalizer=None):
+    def iter(self, batch_size, start=None, end=None,
+        shuffle=True, seed=None, normalizer=None):
         block_batch = _create_batch(self.shape[0], batch_size,
                                     start, end, shuffle, seed)
-
         for block, idx_batches in block_batch.iteritems():
             data = self._data[block[0]:block[1] + 1]
             idx = idx_batches[0]

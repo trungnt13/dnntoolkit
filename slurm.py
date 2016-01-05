@@ -75,7 +75,7 @@ source deactivate
 # Interactive
 # ======================================================================
 #srun -N 1 -p gpu -t 30 --gres=gpu:1 --pty $SHELL -l
-def igpu(t, n, mem=15000):
+def igpu(t=30, n=1, mem=15000):
     arch = 'gpu'
     if t <= 15:
         arch = 'gputest'
@@ -84,7 +84,7 @@ def igpu(t, n, mem=15000):
 
     os.system('srun -N %d -p %s -t %d --gres=gpu:2 --mem=%d --pty $SHELL -l' % (N, arch, t, mem))
 
-def icpu(t, n, mem=15000):
+def icpu(t=30, n=8, mem=16000):
     N = int(math.ceil(n / 16))
     arch = 'serial'
     if t <= 15:
