@@ -395,7 +395,7 @@ class tensor():
 
     @staticmethod
     def shared_scalar(val=0., dtype=theano.config.floatX, name=None):
-        return theano.shared(np.cast[dtype](val))
+        return theano.shared(np.cast[dtype](val), name=name)
 
     @staticmethod
     def shared_ones(shape, dtype=theano.config.floatX, name=None):
@@ -614,7 +614,9 @@ class model(object):
         self._weights = []
         self._save_path = None
 
-        self._model_func = ''
+        self._model_func = None
+        self._model_name = None
+        self._model_args = None
         self._api = 'lasagne'
         self._sandbox = ''
 
@@ -725,7 +727,13 @@ class model(object):
             import traceback; traceback.print_exc();
         return prediction
 
+    def print_model(self):
+        import inspect
+        if self._model_func is not None:
+            print(inspect.getsource(self._model_func))
+
     # ==================== History manager ==================== #
+
     def reset_history(self):
         self._history = []
 
@@ -903,17 +911,19 @@ class model(object):
         f = h5py.File(path, 'w')
         f['history'] = cPickle.dumps(self._history)
 
-        model_func = marshal.dumps(self._model_func.func_code)
-        b = array("B", model_func)
-        f['model_func'] = cPickle.dumps(b)
-        f['model_args'] = cPickle.dumps(self._model_args)
-        f['model_name'] = self._model_name
-        f['sandbox'] = cPickle.dumps(self._sandbox)
-        f['api'] = self._api
+        if self._model_func is not None:
+            model_func = marshal.dumps(self._model_func.func_code)
+            b = array("B", model_func)
+            f['model_func'] = cPickle.dumps(b)
+            f['model_args'] = cPickle.dumps(self._model_args)
+            f['model_name'] = self._model_name
+            f['sandbox'] = cPickle.dumps(self._sandbox)
+            f['api'] = self._api
 
-        for i, w in enumerate(self._weights):
-            f['weight_%d' % i] = w
-        f['nb_weights'] = len(self._weights)
+        if len(self._weights) > 0:
+            for i, w in enumerate(self._weights):
+                f['weight_%d' % i] = w
+            f['nb_weights'] = len(self._weights)
         f.close()
 
     @staticmethod
@@ -959,7 +969,6 @@ class model(object):
             m._model_func = types.FunctionType(m._model_func, globals(), m._model_name)
         else: m._model_func = None
 
-        m._weights = []
         if 'nb_weights' in f:
             for i in xrange(f['nb_weights'].value):
                 m._weights.append(f['weight_%d' % i].value)
