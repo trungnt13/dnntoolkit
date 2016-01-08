@@ -1847,6 +1847,15 @@ class dataset(object):
             s += ' - name:%s  shape:%s  dtype:%s' % i + '\n'
         return s
 
+    @staticmethod
+    def load_mnist(path):
+        '''
+        path : str
+            local path or url to hdf5 datafile
+        '''
+        datapath = net.get_file('mnist.hdf', path)
+        return dataset(datapath, mode='r')
+
 # ======================================================================
 # Visualiztion
 # ======================================================================
@@ -2411,3 +2420,62 @@ class SSH(object):
     def close(self):
         self.sftp.close()
         self.ssh.close()
+
+# ======================================================================
+# Net
+# ======================================================================
+from six.moves.urllib.request import FancyURLopener
+
+class ParanoidURLopener(FancyURLopener):
+
+    def http_error_default(self, url, fp, errcode, errmsg, headers):
+        raise Exception('URL fetch failure on {}: {} -- {}'.format(url, errcode, errmsg))
+
+class net():
+
+    @staticmethod
+    def get_file(fname, origin):
+        ''' Get file from internet or local network.
+
+        Parameters
+        ----------
+        fname : str
+            name of downloaded file
+        origin : str
+            html link, path to file want to download
+
+        Returns
+        -------
+        return : str
+            path to downloaded file
+
+        Notes
+        -----
+        Download files are saved at one of these location (order of priority):
+         - ~/.dnntoolkit/datasets/
+         - /tmp/.dnntoolkit/datasets/
+        '''
+        if os.path.exists(origin) and not os.path.isdir(origin):
+            return origin
+
+        datadir_base = os.path.expanduser(os.path.join('~', '.dnntoolkit'))
+        if not os.access(datadir_base, os.W_OK):
+            datadir_base = os.path.join('/tmp', '.dnntoolkit')
+        datadir = os.path.join(datadir_base, 'datasets')
+        if not os.path.exists(datadir):
+            os.makedirs(datadir)
+        fpath = os.path.join(datadir, fname)
+
+        if not os.path.exists(fpath):
+            print('Downloading data from', origin)
+            global progbar
+            progbar = None
+
+            def dl_progress(count, block_size, total_size):
+                logger.progress(count * block_size, total_size,
+                    title='Downloading')
+
+            ParanoidURLopener().retrieve(origin, fpath, dl_progress)
+            progbar = None
+
+        return fpath
