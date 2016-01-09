@@ -1848,13 +1848,19 @@ class dataset(object):
         return s
 
     @staticmethod
-    def load_mnist(path):
+    def load_mnist(path='https://s3.amazonaws.com/ai-datasets/mnist.hdf'):
         '''
         path : str
             local path or url to hdf5 datafile
         '''
         datapath = net.get_file('mnist.hdf', path)
         return dataset(datapath, mode='r')
+
+    def load_imdb(path):
+        pass
+
+    def load_reuters(path):
+        pass
 
 # ======================================================================
 # Visualiztion
@@ -2457,10 +2463,12 @@ class net():
         '''
         if os.path.exists(origin) and not os.path.isdir(origin):
             return origin
+        import pwd
+        user_name = pwd.getpwuid(os.getuid())[0]
 
         datadir_base = os.path.expanduser(os.path.join('~', '.dnntoolkit'))
         if not os.access(datadir_base, os.W_OK):
-            datadir_base = os.path.join('/tmp', '.dnntoolkit')
+            datadir_base = os.path.join('/tmp', user_name, '.dnntoolkit')
         datadir = os.path.join(datadir_base, 'datasets')
         if not os.path.exists(datadir):
             os.makedirs(datadir)
@@ -2473,7 +2481,7 @@ class net():
 
             def dl_progress(count, block_size, total_size):
                 logger.progress(count * block_size, total_size,
-                    title='Downloading')
+                    title='Downloading %s' % fname)
 
             ParanoidURLopener().retrieve(origin, fpath, dl_progress)
             progbar = None
