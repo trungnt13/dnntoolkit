@@ -1022,7 +1022,7 @@ def _parse_data_config(task, data):
 class trainer(object):
 
     """
-    TODO: request validation function
+    TODO: request validation function, add custome data (not instance of dataset)
     Value can be queried on callback:
         idx: current run idx in the strategies
         cost: current training, testing, validating cost
