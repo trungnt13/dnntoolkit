@@ -988,15 +988,13 @@ class model(object):
     def update(self, tags, new, after=None, before=None, n=None, absolute=False):
         self._check_current_working_history()
         self._working_history.update(self, tags, new,
-            after=None, before=None, n=None, absolute=False)
+            after, before, n, absolute)
 
     def select(self, tags, default=None, after=None, before=None, n=None,
         filter_value=None, absolute=False, newest=False, return_time=False):
         self._check_current_working_history()
-        self._working_history.select(tags, default=None,
-                                after=None, before=None, n=None,
-                                filter_value=None, absolute=False,
-                                newest=False, return_time=False)
+        self._working_history.select(tags, default, after, before, n,
+                                filter_value, absolute, newest, return_time)
 
     def print_history(self):
         self._check_current_working_history()
