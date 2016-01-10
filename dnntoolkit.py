@@ -1058,12 +1058,19 @@ class trainer(object):
 
         self._stop = False
 
+        self._log_enable = True
+        self._log_newline = False
+
     # ==================== Command ==================== #
     def stop(self):
         ''' Stop current activity of this trainer immediatelly '''
         self._stop = True
 
     # ==================== Setter ==================== #
+    def set_log(self, enable=True, newline=True):
+        self._log_enable = enable
+        self._log_newline = newline
+
     def set_dataset(self, data, train=None, valid=None, test=None):
         ''' Set dataset for trainer.
 
@@ -1260,9 +1267,10 @@ class trainer(object):
             else:
                 test_cost.append(cost)
 
-            logger.progress(n, max_val=ntest,
-                title='Test:Cost:%.2f' % (np.mean(cost)),
-                newline=False)
+            if self._log_enable:
+                logger.progress(n, max_val=ntest,
+                    title='Test:Cost:%.2f' % (np.mean(cost)),
+                    newline=self._log_newline)
 
             self.cost = cost
             self.iter = it
@@ -1308,9 +1316,10 @@ class trainer(object):
             else:
                 valid_cost.append(cost)
 
-            logger.progress(n, max_val=nvalid,
-                title='Valid:Cost:%.2f' % (np.mean(cost)),
-                newline=False)
+            if self._log_enable:
+                logger.progress(n, max_val=nvalid,
+                    title='Valid:Cost:%.2f' % (np.mean(cost)),
+                    newline=self._log_newline)
 
             self.cost = cost
             self.iter = it
@@ -1374,9 +1383,10 @@ class trainer(object):
                 # log
                 epoch_cost.append(cost)
                 train_cost.append(cost)
-                logger.progress(n, max_val=ntrain,
-                    title='Epoch:%d,Iter:%d,Cost:%.2f' % (i + 1, it, cost),
-                    newline=True)
+                if self._log_enable:
+                    logger.progress(n, max_val=ntrain,
+                        title='Epoch:%d,Iter:%d,Cost:%.2f' % (i + 1, it, cost),
+                        newline=self._log_newline)
 
                 # end batch
                 self.cost = cost
