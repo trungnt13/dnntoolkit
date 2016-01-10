@@ -579,6 +579,231 @@ def earlystop(costs, generalization_loss = False, generalization_sensitive=False
 # ======================================================================
 # Model
 # ======================================================================
+def _get_ms_time():
+    return int(round(time.time() * 1000)) # in ms
+
+class _history(object):
+
+    """
+    Simple object to record data row in form:
+        [time, [tags], values]
+
+    Notes
+    -----
+    Should store primitive data
+    """
+
+    def __init__(self, name=None, description=None):
+        super(_history, self).__init__()
+        self._name = name
+        self._description = description
+        self._history = []
+        self._init_time = _get_ms_time()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def description(self):
+        return self._description
+
+    @property
+    def time(self):
+        return self._init_time
+
+    # ==================== multiple history ==================== #
+    def merge(self, *history):
+        h = _history()
+        all_names = [self.name] + [i.name for i in history]
+        h._name = 'Merge:<' + ','.join(all_names) + '>'
+        data = []
+        data += self._history
+        for i in history:
+            data += i._history
+        data = sorted(data, key=lambda x: x[0])
+        h._history = data
+        return h
+
+    # ==================== History manager ==================== #
+
+    def clear_history(self):
+        self._history = []
+
+    def record(self, values, *tags):
+        curr_time = _get_ms_time()
+
+        if not isinstance(tags, list) and not isinstance(tags, tuple):
+            tags = [tags]
+        tags = set(tags)
+
+        # timestamp must never equal
+        if len(self._history) > 0 and self._history[-1][0] >= curr_time:
+            curr_time = self._history[-1][0] + 1
+
+        self._history.append([curr_time, tags, values])
+
+    def update(self, tags, new, after=None, before=None, n=None, absolute=False):
+        ''' Apply a funciton to all selected value
+
+        Parameters
+        ----------
+        tags : list, str, filter function or any comparable object
+            get all values contain given tags
+        new : function, object, values
+            update new values
+        after, before : time constraint (in millisecond)
+            after < t < before
+        n : int
+            number of record will be update
+        filter_value : function
+            function to filter each value found
+        absolute : boolean
+            whether required the same set of tags or just contain
+
+        '''
+        # ====== preprocess arguments ====== #
+        history = self._history
+        if not isinstance(tags, list) and not isinstance(tags, tuple):
+            tags = [tags]
+        tags = set(tags)
+        tags = [t if hasattr(t, '__call__') else _create_comparator(t) for t in tags]
+
+        if len(history) == 0:
+            return []
+        if not hasattr(tags, '__len__'):
+            tags = [tags]
+        if after is None:
+            after = history[0][0]
+        if before is None:
+            before = history[-1][0]
+        if n is None or n < 0:
+            n = len(history)
+
+        # ====== searching ====== #
+        count = 0
+        for row in history:
+            if count > n:
+                break
+
+            # check time
+            time = row[0]
+            if time < after or time > before:
+                continue
+            # check tags
+            if not _is_tags_match(tags, row[1], absolute):
+                continue
+            # check value
+            if hasattr(new, '__call__'):
+                row[2] = new(row[2])
+            else:
+                row[2] = new
+            count += 1
+
+    def select(self, tags, default=None, after=None, before=None, n=None,
+        filter_value=None, absolute=False, newest=False, return_time=False):
+        ''' Query in history
+
+        Parameters
+        ----------
+        tags : list, str, filter function or any comparable object
+            get all values contain given tags
+        after, before : time constraint (in millisecond)
+            after < t < before
+        n : int
+            number of record return
+        filter_value : function(value)
+            function to filter each value found
+        absolute : boolean
+            whether required the same set of tags or just contain
+        newest : boolean
+            returning order (newest first, default is False)
+        time : boolean
+            whether return time tags
+
+        Returns
+        -------
+        return : list
+            always return list, in case of no value, return empty list
+        '''
+        # ====== preprocess arguments ====== #
+        history = self._history
+        if not isinstance(tags, list) and not isinstance(tags, tuple):
+            tags = [tags]
+        tags = set(tags)
+        tags = [t if hasattr(t, '__call__') else _create_comparator(t) for t in tags]
+
+        if len(history) == 0:
+            return []
+        if after is None:
+            after = history[0][0]
+        if before is None:
+            before = history[-1][0]
+        if n is None or n < 0:
+            n = len(history)
+
+        # ====== searching ====== #
+        res = []
+        for row in history:
+            if len(res) > n:
+                break
+
+            # check time
+            time = row[0]
+            if time < after or time > before:
+                continue
+            # check tags
+            if not _is_tags_match(tags, row[1], absolute):
+                continue
+            # check value
+            val = row[2]
+            if filter_value is not None and not filter_value(val):
+                continue
+            # ok, found it!
+            res.append((time, val))
+
+        # ====== return results ====== #
+        if not return_time:
+            res = [i[1] for i in res]
+
+        if newest:
+            return list(reversed(res))
+
+        if len(res) == 0 and default is not None:
+            return default
+        return res
+
+    # ==================== pretty print ==================== #
+
+    def print_history(self):
+        fmt = '|%13s | %40s | %20s|'
+        sep = ('-' * 13, '-' * 40, '-' * 20)
+        # header
+        print(fmt % sep)
+        print(fmt % ('Time', 'Tags', 'Values'))
+        print(fmt % sep)
+        # contents
+        for row in self._history:
+            row = tuple([str(i) for i in row])
+            print(fmt % row)
+
+    def __str__(self):
+        from collections import defaultdict
+        unique_tags = defaultdict(int)
+        for i in self._history:
+            for j in i[1]:
+                unique_tags[j] += 1
+        s = ''
+        s += '======== History Frame ========' + '\n'
+        s += ' - Name: %s' % self._name + '\n'
+        s += ' - Description: %s' % self._description + '\n'
+        s += ' - Init time: %s' % time.ctime(int(self._init_time / 1000)) + '\n'
+        s += ' - Statistic:' + '\n'
+        s += '   - Len:%d' % len(self._history) + '\n'
+        for k, v in unique_tags.iteritems():
+            s += '   - tags: %-10s  -  freq:%d' % (k, v) + '\n'
+        return s
+
 def _create_comparator(t):
     return lambda x: x == t
 
@@ -611,6 +836,8 @@ class model(object):
     def __init__(self):
         super(model, self).__init__()
         self._history = []
+        self._working_history = None
+
         self._weights = []
         self._save_path = None
 
@@ -733,169 +960,55 @@ class model(object):
             print(inspect.getsource(self._model_func))
 
     # ==================== History manager ==================== #
+    def _check_current_working_history(self):
+        if self._working_history is None:
+            if len(self._history) == 0:
+                self._history.append(_history())
+            self._working_history = self._history[-1]
 
-    def reset_history(self):
-        self._history = []
+    def __getitem__(self, key):
+        self._check_current_working_history()
+        if isinstance(key, slice):
+            h = self._history[key]
+            return h[0].merge(*h[1:])
+        elif isinstance(key, str):
+            for i in self._history:
+                if key == i.name:
+                    return i
+        raise ValueError('Model index must be [slice] or [str]')
+
+    def new_frame(self, name=None, description=None):
+        self._history.append(_history(name, description))
+        self._working_history = self._history[-1]
 
     def record(self, values, *tags):
-        # in GMT
-        curr_time = int(round(time.time() * 1000)) # in ms
-
-        if not isinstance(tags, list) and not isinstance(tags, tuple):
-            tags = [tags]
-        tags = set(tags)
-
-        # timestamp must never equal
-        if len(self._history) > 0 and self._history[-1][0] >= curr_time:
-            curr_time = self._history[-1][0] + 1
-
-        self._history.append([curr_time, tags, values])
+        self._check_current_working_history()
+        self._working_history.record(values, *tags)
 
     def update(self, tags, new, after=None, before=None, n=None, absolute=False):
-        ''' Apply a funciton to all selected value
+        self._check_current_working_history()
+        self._working_history.update(self, tags, new,
+            after=None, before=None, n=None, absolute=False)
 
-        Parameters
-        ----------
-        tags : list, str, filter function or any comparable object
-            get all values contain given tags
-        new : function, object, values
-            update new values
-        after, before : time constraint (in millisecond)
-            after < t < before
-        n : int
-            number of record will be update
-        filter_value : function
-            function to filter each value found
-        absolute : boolean
-            whether required the same set of tags or just contain
-
-        '''
-        # ====== preprocess arguments ====== #
-        history = self._history
-        if not isinstance(tags, list) and not isinstance(tags, tuple):
-            tags = [tags]
-        tags = set(tags)
-        tags = [t if hasattr(t, '__call__') else _create_comparator(t) for t in tags]
-
-        if len(history) == 0:
-            return []
-        if not hasattr(tags, '__len__'):
-            tags = [tags]
-        if after is None:
-            after = history[0][0]
-        if before is None:
-            before = history[-1][0]
-        if n is None or n < 0:
-            n = len(history)
-
-        # ====== searching ====== #
-        count = 0
-        for row in history:
-            if count > n:
-                break
-
-            # check time
-            time = row[0]
-            if time < after or time > before:
-                continue
-            # check tags
-            if not _is_tags_match(tags, row[1], absolute):
-                continue
-            # check value
-            if hasattr(new, '__call__'):
-                row[2] = new(row[2])
-            else:
-                row[2] = new
-            count += 1
-
-    def select(self, tags, default=None,
-        after=None, before=None, n=None,
-        filter_value=None, absolute=False,
-        newest=False, return_time=False):
-        ''' Query in history
-
-        Parameters
-        ----------
-        tags : list, str, filter function or any comparable object
-            get all values contain given tags
-        after, before : time constraint (in millisecond)
-            after < t < before
-        n : int
-            number of record return
-        filter_value : function(value)
-            function to filter each value found
-        absolute : boolean
-            whether required the same set of tags or just contain
-        newest : boolean
-            returning order (newest first, default is False)
-        time : boolean
-            whether return time tags
-
-        Returns
-        -------
-        return : list
-            always return list, in case of no value, return empty list
-        '''
-        # ====== preprocess arguments ====== #
-        history = self._history
-        if not isinstance(tags, list) and not isinstance(tags, tuple):
-            tags = [tags]
-        tags = set(tags)
-        tags = [t if hasattr(t, '__call__') else _create_comparator(t) for t in tags]
-
-        if len(history) == 0:
-            return []
-        if after is None:
-            after = history[0][0]
-        if before is None:
-            before = history[-1][0]
-        if n is None or n < 0:
-            n = len(history)
-
-        # ====== searching ====== #
-        res = []
-        for row in history:
-            if len(res) > n:
-                break
-
-            # check time
-            time = row[0]
-            if time < after or time > before:
-                continue
-            # check tags
-            if not _is_tags_match(tags, row[1], absolute):
-                continue
-            # check value
-            val = row[2]
-            if filter_value is not None and not filter_value(val):
-                continue
-            # ok, found it!
-            res.append((time, val))
-
-        # ====== return results ====== #
-        if not return_time:
-            res = [i[1] for i in res]
-
-        if newest:
-            return list(reversed(res))
-
-        if len(res) == 0 and default is not None:
-            return default
-        return res
-
-    # ==================== pretty print ==================== #
+    def select(self, tags, default=None, after=None, before=None, n=None,
+        filter_value=None, absolute=False, newest=False, return_time=False):
+        self._check_current_working_history()
+        self._working_history.select(tags, default=None,
+                                after=None, before=None, n=None,
+                                filter_value=None, absolute=False,
+                                newest=False, return_time=False)
 
     def print_history(self):
-        fmt = '|%13s | %40s | %20s|'
-        sep = ('-' * 13, '-' * 40, '-' * 20)
-        # header
-        print(fmt % sep)
-        print(fmt % ('Time', 'Tags', 'Values'))
-        print(fmt % sep)
-        # contents
-        for row in self._history:
-            row = tuple([str(i) for i in row])
-            print(fmt % row)
+        self._check_current_working_history()
+        self._working_history.print_history()
+
+    def print_frames(self):
+        self._check_current_working_history()
+        for i in self._history:
+            if i == self._working_history:
+                print('* ' + str(i))
+            else:
+                print(i)
 
     # ==================== Load & Save ==================== #
     def save(self, path=None):
