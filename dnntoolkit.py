@@ -1067,7 +1067,7 @@ class trainer(object):
         self._stop = True
 
     # ==================== Setter ==================== #
-    def set_log(self, enable=True, newline=True):
+    def set_log(self, enable=True, newline=False):
         self._log_enable = enable
         self._log_newline = newline
 
@@ -1864,6 +1864,7 @@ class dataset(object):
             local path or url to hdf5 datafile
         '''
         datapath = net.get_file('mnist.hdf', path)
+        print('Loading data from: %s' % datapath)
         return dataset(datapath, mode='r')
 
     def load_imdb(path):

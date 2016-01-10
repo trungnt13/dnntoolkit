@@ -37,25 +37,6 @@ ds['y_test'].append(y_test)
 
 ds.close()
 
-X_train = np.random.rand(n * 2, dim)
-y_train = dnntoolkit.tensor.to_categorical(np.random.randint(0, k, size=n * 2), n_classes=k)
-
-X_valid = np.random.rand(n, dim)
-y_valid = dnntoolkit.tensor.to_categorical(np.random.randint(0, k, size=n), n_classes=k)
-
-X_test = np.random.rand(n * 3, dim)
-y_test = dnntoolkit.tensor.to_categorical(np.random.randint(0, k, size=n * 3), n_classes=k)
-
-ds = dnntoolkit.dataset('tmp1.hdf', mode='w')
-ds['X_train'].append(X_train)
-ds['y_train'].append(y_train)
-ds['X_valid'].append(X_valid)
-ds['y_valid'].append(y_valid)
-ds['X_test'].append(X_test)
-ds['y_test'].append(y_test)
-
-ds.close()
-
 # ======================================================================
 # Load data
 # ======================================================================
