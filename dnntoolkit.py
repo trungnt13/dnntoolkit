@@ -981,6 +981,14 @@ class model(object):
         self._history.append(_history(name, description))
         self._working_history = self._history[-1]
 
+    def drop_frame(self):
+        if len(self._history) < 2:
+            self._history = []
+        else:
+            self._history = self._history[:-1]
+        self._working_history = None
+        self._check_current_working_history()
+
     def record(self, values, *tags):
         self._check_current_working_history()
         self._working_history.record(values, *tags)
@@ -1470,7 +1478,7 @@ class trainer(object):
         it = 0
         ntrain = self._dataset[train_data[0]].shape[0]
         if validfreq < 1.0: # validate validfreq
-            validfreq = int(validfreq * ntrain / batch)
+            validfreq = int(max(validfreq * ntrain / batch, 1))
         train_cost = []
         # ====== start ====== #
         for i in xrange(epoch):
@@ -1531,47 +1539,58 @@ class trainer(object):
         self._finish_train(train_cost)
 
     def run(self):
-        ''' run specified strategies '''
-        while self.idx < len(self._strategy):
-            config = self._strategy[self.idx]
-            task = config['task']
-            train, valid, test = _parse_data_config(task, config['data'])
-            if train is None: train = self._train_data
-            if test is None: test = self._test_data
-            if valid is None: valid = self._valid_data
+        ''' run specified strategies
+        Returns
+        -------
+        return : bool
+            if exception raised, return False, otherwise return True
+        '''
+        try:
+            while self.idx < len(self._strategy):
+                config = self._strategy[self.idx]
+                task = config['task']
+                train, valid, test = _parse_data_config(task, config['data'])
+                if train is None: train = self._train_data
+                if test is None: test = self._test_data
+                if valid is None: valid = self._valid_data
 
-            epoch = config['epoch']
-            batch = config['batch']
-            validfreq = config['validfreq']
-            shuffle = config['shuffle']
+                epoch = config['epoch']
+                batch = config['batch']
+                validfreq = config['validfreq']
+                shuffle = config['shuffle']
 
-            self.idx += 1
-            print('\n******* %d-th run, with configuration: *******' % self.idx)
-            print(' - Task:%s' % task)
-            print(' - Train data:%s' % str(train))
-            print(' - Valid data:%s' % str(valid))
-            print(' - Test data:%s' % str(test))
-            print(' - Epoch:%d' % epoch)
-            print(' - Batch:%d' % batch)
-            print(' - Validfreq:%d' % validfreq)
-            print(' - Shuffle:%s' % str(shuffle))
-            print('**********************************************')
+                self.idx += 1
+                print('\n******* %d-th run, with configuration: *******' % self.idx)
+                print(' - Task:%s' % task)
+                print(' - Train data:%s' % str(train))
+                print(' - Valid data:%s' % str(valid))
+                print(' - Test data:%s' % str(test))
+                print(' - Epoch:%d' % epoch)
+                print(' - Batch:%d' % batch)
+                print(' - Validfreq:%d' % validfreq)
+                print(' - Shuffle:%s' % str(shuffle))
+                print('**********************************************')
 
-            if 'train' in task:
-                if train is None:
-                    print('*** WARNING: no TRAIN data found, ignored **')
-                else:
-                    self._train(train, valid, epoch, batch, validfreq, shuffle)
-            elif 'valid' in task:
-                if valid is None:
-                    print('*** WARNING: no VALID data found, ignored **')
-                else:
-                    self._valid(valid, batch)
-            elif 'test' in task:
-                if test is None:
-                    print('*** WARNING: no TEST data found, ignored **')
-                else:
-                    self._test(test, batch)
+                if 'train' in task:
+                    if train is None:
+                        print('*** WARNING: no TRAIN data found, ignored **')
+                    else:
+                        self._train(train, valid, epoch, batch, validfreq, shuffle)
+                elif 'valid' in task:
+                    if valid is None:
+                        print('*** WARNING: no VALID data found, ignored **')
+                    else:
+                        self._valid(valid, batch)
+                elif 'test' in task:
+                    if test is None:
+                        print('*** WARNING: no TEST data found, ignored **')
+                    else:
+                        self._test(test, batch)
+        except Exception, e:
+            print(str(e))
+            import traceback; traceback.print_exc();
+            return False
+        return True
 
     # ==================== Debug ==================== #
     def __str__(self):
