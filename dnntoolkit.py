@@ -336,7 +336,8 @@ class tensor():
         Example
         -------
             > print(split_chunks(np.array([1, 2, 3, 4, 5, 6, 7, 8]), 5, 1))
-            > [[1, 2, 3, 4, 5], [4, 5, 6, 7, 8]]
+            > [[1, 2, 3, 4, 5],
+               [4, 5, 6, 7, 8]]
         '''
         chunks = []
         nchunks = int((max(a.shape) - maxlen) / (maxlen - overlap)) + 1
