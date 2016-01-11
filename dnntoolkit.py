@@ -32,7 +32,6 @@ import os
 import sys
 import math
 import time
-import Queue
 
 from itertools import izip
 from collections import OrderedDict
@@ -54,6 +53,50 @@ from stat import S_ISDIR
 
 
 MAGIC_SEED = 12082518
+
+# ======================================================================
+# Helper data structure
+# ======================================================================
+class queue(object):
+
+    """ FIFO, fast, NO thread-safe queue """
+
+    def __init__(self):
+        super(queue, self).__init__()
+        self._data = []
+        self._idx = 0
+
+    def put(self, value):
+        self._data.append(value)
+
+    def append(self, value):
+        self._data.append(value)
+
+    def pop(self):
+        if self._idx == len(self._data):
+            raise ValueError('Queue is empty')
+        self._idx += 1
+        return self._data[self._idx - 1]
+
+    def get(self):
+        if self._idx == len(self._data):
+            raise ValueError('Queue is empty')
+        self._idx += 1
+        return self._data[self._idx - 1]
+
+    def empty(self):
+        if self._idx == len(self._data):
+            return True
+        return False
+
+    def clear(self):
+        del self._data
+        self._data = []
+        self._idx = 0
+
+    def __len__(self):
+        return len(self._data) - self._idx
+
 # ======================================================================
 # Multiprocessing
 # ======================================================================
@@ -209,11 +252,18 @@ class io():
     def extract_files(path, filter_func=None):
         ''' Recurrsively get all files in the given path '''
         file_list = []
-        for p in os.listdir(path):
-            p = os.path.join(path, p)
+        q = queue()
+        # init queue
+        if os.access(path, os.R_OK):
+            for p in os.listdir(path):
+                q.put(os.path.join(path, p))
+        # process
+        while not q.empty():
+            p = q.pop()
             if os.path.isdir(p):
-                f = io.extract_files(p, filter_func)
-                if f is not None: file_list += f
+                if os.access(p, os.R_OK):
+                    for i in os.listdir(p):
+                        q.put(os.path.join(p, i))
             else:
                 if filter_func is not None and not filter_func(p):
                     continue
@@ -1999,19 +2049,19 @@ class dataset(object):
         '''
         res = []
         # init queue
-        queue = Queue.Queue()
+        q = queue()
         for i in self.hdf[path].keys():
-            queue.put(i)
+            q.put(i)
         # get list of all file
-        while not queue.empty():
-            p = queue.get()
+        while not q.empty():
+            p = q.pop()
             if 'Dataset' in str(type(self.hdf[p])):
                 if fileter_func is not None and not fileter_func(p):
                     continue
                 res.append(p)
             elif 'Group' in str(type(self.hdf[p])):
                 for i in self.hdf[p].keys():
-                    queue.put(p + '/' + i)
+                    q.put(p + '/' + i)
         return res
 
     # ==================== Main ==================== #
@@ -2058,6 +2108,7 @@ class dataset(object):
             s += ' - name:%s  shape:%s  dtype:%s' % i + '\n'
         return s
 
+    # ==================== Static loading ==================== #
     @staticmethod
     def load_mnist(path='https://s3.amazonaws.com/ai-datasets/mnist.hdf'):
         '''
