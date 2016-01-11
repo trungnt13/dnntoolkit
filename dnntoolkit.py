@@ -32,6 +32,7 @@ import os
 import sys
 import math
 import time
+from stat import S_ISDIR
 
 from itertools import izip
 from collections import OrderedDict
@@ -43,13 +44,9 @@ import theano
 from theano import tensor as T
 
 import h5py
-
 import pandas as pd
-
 import soundfile
-
 import paramiko
-from stat import S_ISDIR
 
 
 MAGIC_SEED = 12082518
@@ -1934,9 +1931,6 @@ class _batch(object):
             self._append_data(copy)
         return self
 
-    def __len__(self):
-        return self._data.shape[0]
-
     def iter(self, batch_size, start=None, end=None,
         shuffle=True, seed=None, normalizer=None):
         block_batch = _create_batch(self.shape[0], batch_size,
@@ -1955,6 +1949,9 @@ class _batch(object):
                     yield normalizer(data[s:e])
                 else:
                     yield data[s:e]
+
+    def __len__(self):
+        return self._data.shape[0]
 
     def __getitem__(self, key):
         return self._data[key]
@@ -2067,15 +2064,19 @@ class dataset(object):
     # ==================== Main ==================== #
     def __getitem__(self, key):
         if key not in self._datamap:
+            # return string directly
             if key in self.hdf and self.hdf[key].dtype == np.dtype('O'):
                 return self.hdf[key]
+            # return batch object to handle
             else:
                 self._datamap[key] = _batch(self, key)
         return self._datamap[key]
 
     def __setitem__(self, key, value):
+        # set str value directly
         if isinstance(value, str):
             self.hdf[key] = value
+        # array
         else:
             if key not in self.hdf:
                 if hasattr(value, 'dtype'):
