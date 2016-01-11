@@ -627,7 +627,7 @@ class _history(object):
 
     # ==================== History manager ==================== #
 
-    def clear_history(self):
+    def clear(self):
         self._history = []
 
     def record(self, values, *tags):
@@ -708,6 +708,8 @@ class _history(object):
         ----------
         tags : list, str, filter function or any comparable object
             get all values contain given tags
+        default : object
+            default return value of found nothing
         after, before : time constraint (in millisecond)
             after < t < before
         n : int
@@ -847,9 +849,8 @@ class model(object):
         self._api = 'lasagne'
         self._sandbox = ''
 
+        # contain real model object
         self._model = None
-        self._model_args = None
-        self._model_name = None
 
     # ==================== Model manager ==================== #
     def set_weights(self, weights):
@@ -968,14 +969,17 @@ class model(object):
 
     def __getitem__(self, key):
         self._check_current_working_history()
-        if isinstance(key, slice):
+        if isinstance(key, slice) or isinstance(key, int):
             h = self._history[key]
-            return h[0].merge(*h[1:])
+            if hasattr(h, '__len__'):
+                if len(h) > 1: return h[0].merge(*h[1:])
+                else: return h[0]
+            return h
         elif isinstance(key, str):
             for i in self._history:
                 if key == i.name:
                     return i
-        raise ValueError('Model index must be [slice] or [str]')
+        raise ValueError('Model index must be [slice], [int] or [str]')
 
     def new_frame(self, name=None, description=None):
         self._history.append(_history(name, description))
@@ -1000,9 +1004,35 @@ class model(object):
 
     def select(self, tags, default=None, after=None, before=None, n=None,
         filter_value=None, absolute=False, newest=False, return_time=False):
+        ''' Query in history
+
+        Parameters
+        ----------
+        tags : list, str, filter function or any comparable object
+            get all values contain given tags
+        default : object
+            default return value of found nothing
+        after, before : time constraint (in millisecond)
+            after < t < before
+        n : int
+            number of record return
+        filter_value : function(value)
+            function to filter each value found
+        absolute : boolean
+            whether required the same set of tags or just contain
+        newest : boolean
+            returning order (newest first, default is False)
+        time : boolean
+            whether return time tags
+
+        Returns
+        -------
+        return : list
+            always return list, in case of no value, return empty list
+        '''
         self._check_current_working_history()
-        self._working_history.select(tags, default, after, before, n,
-                                filter_value, absolute, newest, return_time)
+        return self._working_history.select(tags, default, after, before, n,
+            filter_value, absolute, newest, return_time)
 
     def print_history(self):
         self._check_current_working_history()
@@ -1015,6 +1045,38 @@ class model(object):
                 print('* ' + str(i))
             else:
                 print(i)
+
+    def __str__(self):
+        import inspect
+
+        s = ''
+        s += 'Model: %s' % self._save_path + '\n'
+
+        # history
+        self._check_current_working_history()
+        for i in self._history:
+            if i == self._working_history:
+                s += '* ' + str(i) + '\n'
+            else:
+                s += i + '\n'
+
+        # weight
+        s += '======== Weights ========\n'
+        for w in self._weights:
+            s += ' - shape:%s' % w.shape + '\n'
+
+        # model function
+        s += '======== Code ========\n'
+        s += ' - api:%s' % self._api + '\n'
+        s += ' - name:%s' % self._model_name + '\n'
+        s += ' - args:%s' % str(self._model_args) + '\n'
+        s += ' - sandbox:%s' % str(self._sandbox) + '\n'
+        if self._model_func is not None:
+            s += ' - code:\n%s' % inspect.getsource(self._model_func.func_code) + '\n'
+        else:
+            s += ' - code:\n%s' % self._model_func + '\n'
+
+        return s
 
     # ==================== Load & Save ==================== #
     def save(self, path=None):
