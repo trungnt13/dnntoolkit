@@ -32,6 +32,7 @@ import os
 import sys
 import math
 import time
+import Queue
 
 from itertools import izip
 from collections import OrderedDict
@@ -1997,14 +1998,20 @@ class dataset(object):
             names of all dataset
         '''
         res = []
-        for p in self.hdf[path].keys():
-            p = os.path.join(path, p)
+        # init queue
+        queue = Queue.Queue()
+        for i in self.hdf[path].keys():
+            queue.put(i)
+        # get list of all file
+        while not queue.empty():
+            p = queue.get()
             if 'Dataset' in str(type(self.hdf[p])):
                 if fileter_func is not None and not fileter_func(p):
                     continue
                 res.append(p)
             elif 'Group' in str(type(self.hdf[p])):
-                res += self.all_dataset(fileter_func, path=p)
+                for i in self.hdf[p].keys():
+                    queue.put(p + '/' + i)
         return res
 
     # ==================== Main ==================== #
