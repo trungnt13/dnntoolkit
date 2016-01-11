@@ -1622,16 +1622,17 @@ class trainer(object):
                 shuffle = config['shuffle']
 
                 self.idx += 1
-                print('\n******* %d-th run, with configuration: *******' % self.idx)
-                print(' - Task:%s' % task)
-                print(' - Train data:%s' % str(train))
-                print(' - Valid data:%s' % str(valid))
-                print(' - Test data:%s' % str(test))
-                print(' - Epoch:%d' % epoch)
-                print(' - Batch:%d' % batch)
-                print(' - Validfreq:%d' % validfreq)
-                print(' - Shuffle:%s' % str(shuffle))
-                print('**********************************************')
+                if self._log_enable:
+                    print('\n******* %d-th run, with configuration: *******' % self.idx)
+                    print(' - Task:%s' % task)
+                    print(' - Train data:%s' % str(train))
+                    print(' - Valid data:%s' % str(valid))
+                    print(' - Test data:%s' % str(test))
+                    print(' - Epoch:%d' % epoch)
+                    print(' - Batch:%d' % batch)
+                    print(' - Validfreq:%d' % validfreq)
+                    print(' - Shuffle:%s' % str(shuffle))
+                    print('**********************************************')
 
                 if 'train' in task:
                     if train is None:
@@ -2118,13 +2119,33 @@ class visual():
         return ax
 
     @staticmethod
-    def print_hinton(arr, max_arr=None):
-        ''' Print hinton diagrams in terminal for visualization of weights
+    def bar_str(arr, max_arr=None):
+        ''' Print bar string, fast way to visual magnitude of value in terminal
+
         Example:
-            W = np.random.rand(10,10)
-            hinton_print(W)
+        -------
+        >>> W = np.random.rand(10,10)
+        >>> print_hinton(W)
+        >>> ▁▃▄█▅█ ▅▃▅
+        >>> ▅▂▆▄▄ ▅▅
+        >>> ▄██▆▇▆▆█▆▅
+        >>> ▄▄▅▂▂▆▅▁▅▆
+        >>> ▂ ▁  ▁▄▆▅▁
+        >>> ██▃█▃▃▆ ▆█
+        >>>  ▁▂▁ ▁▃▃▆▂
+        >>> ▅▂▂█ ▂ █▄▅
+        >>> ▃▆▁▄▁▆▇▃▅▁
+        >>> ▄▁▇ ██▅ ▂▃
+        Returns
+        -------
+        return : str
+            plot of array, for example: ▄▅▆▇
         '''
-        def visual(val, max_val):
+        arr = np.asarray(arr)
+        if len(arr.shape) == 1:
+            arr = arr[None, :]
+
+        def visual_func(val, max_val):
             if abs(val) == max_val:
                 step = len(visual.chars) - 1
             else:
@@ -2142,11 +2163,12 @@ class visual():
         #                       formatter={'float_kind': lambda x: visual(x, max_val)},
         #                       max_line_width=5000)
         # )
-        f = np.vectorize(visual)
-        result = f(arr, max_val)
+        f = np.vectorize(visual_func)
+        result = f(arr, max_val) # array of ▄▅▆▇
+        rval = ''
         for r in result:
-            print(''.join(r))
-        return result
+            rval += ''.join(r) + '\n'
+        return rval[:-1]
 
     @staticmethod
     def plot_hinton(matrix, max_weight=None, ax=None):
