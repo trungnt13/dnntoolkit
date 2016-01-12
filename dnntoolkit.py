@@ -1772,13 +1772,13 @@ def create_batch(n_samples, batch_size, start=None, end=None, prng=None):
     '''
     #####################################
     # 1. Validate arguments.
-    if start is None:
+    if start is None or start >= n_samples or start < 0:
         start = 0
     if end is None or end < start or end > n_samples:
         end = n_samples
     if start < 1.0:
         start = int(start * n_samples)
-    if end < 1.0:
+    if end <= 1.0:
         end = int(end * n_samples)
     n_samples = end - start
 
@@ -1999,7 +1999,7 @@ class _batch(object):
             if seed is None:
                 seed = MAGIC_SEED
             prng = RandomState(seed)
-            prng.shuffle(all_ds)
+            prng.shuffle(all_ds) # shuffle datasets
 
         all_size = [i.shape[0] for i in all_ds]
         n_dataset = len(all_ds)
@@ -2033,7 +2033,7 @@ class _batch(object):
             idx = []
             for i in tmp_block_batch:
                 t = [j % len(i) for j in xrange(maxlen)]
-                if prng is not None:
+                if prng is not None: # shuffle the upsampling
                     prng.shuffle(t)
                 idx.append(t)
             for i in xrange(maxlen):
@@ -2047,8 +2047,7 @@ class _batch(object):
         else:
             for i, bb in enumerate(tmp_block_batch):
                 for j in bb:
-                    # i = dataset_idx
-                    # j = (block, permutaion, batches)
+                    # i=dataset_idx; j=(block, permutaion, batches)
                     all_block_batch.append([(i, j)])
 
         # remain print if you want debug
@@ -2086,8 +2085,10 @@ class _batch(object):
         batch_size : int
             size of each batch (data will be loaded in big block 8 times
             larger than this size)
-        start : int
-        end : int
+        start : int, float(0.0-1.0)
+            start point in dataset, will apply for all dataset
+        end : int, float(0.0-1.0)
+            end point in dataset, will apply for all dataset
         shuffle : bool, str
             wheather enable shuffle
         seed : int
