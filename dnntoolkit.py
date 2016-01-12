@@ -25,6 +25,7 @@
 # * soundfile
 # * h5py
 # * pandas
+# * numba
 # ======================================================================
 from __future__ import print_function, division
 
@@ -34,10 +35,11 @@ import math
 import time
 from stat import S_ISDIR
 
-from itertools import izip
-from collections import OrderedDict
+from six.moves import zip, zip_longest
+from collections import OrderedDict, defaultdict
 
 import numpy as np
+from numpy.random import RandomState
 import scipy as sp
 
 import theano
@@ -47,7 +49,6 @@ import h5py
 import pandas as pd
 import soundfile
 import paramiko
-
 
 MAGIC_SEED = 12082518
 
@@ -360,7 +361,7 @@ class tensor():
             return: [[1,2,3],[4,5]]
         '''
         res = []
-        for x, mask in izip(X, X_mask):
+        for x, mask in zip(X, X_mask):
             x = x[np.nonzero(mask)]
             res.append(x.tolist())
         return res
@@ -1212,9 +1213,8 @@ class model(object):
 def _callback(trainer):
     pass
 
-def _seed_generator(seed):
+def seed_generator(seed, size=30000):
     np.random.seed(seed)
-    size = 30000 # fixed size
     random_seed = np.random.randint(0, 10e8, size=size)
     for i in xrange(size):
         yield random_seed[i]
@@ -1264,7 +1264,7 @@ class trainer(object):
 
     def __init__(self):
         super(trainer, self).__init__()
-        self._seed = _seed_generator(MAGIC_SEED)
+        self._seed = seed_generator(MAGIC_SEED)
         self._strategy = []
 
         self._train_data = None
@@ -1447,7 +1447,7 @@ class trainer(object):
                 if 'epoch' not in s: s['epoch'] = epoch
                 if 'shuffle' not in s: s['shuffle'] = shuffle
                 if 'data' not in s: s['data'] = data
-                if 'seed' in s: self._seed = _seed_generator(seed)
+                if 'seed' in s: self._seed = seed_generator(seed)
                 self._strategy.append(s)
             return
 
@@ -1463,7 +1463,7 @@ class trainer(object):
             'validfreq': validfreq
         })
         if seed is not None:
-            self._seed = _seed_generator(seed)
+            self._seed = seed_generator(seed)
         return self
 
     # ==================== Logic ==================== #
@@ -1476,7 +1476,7 @@ class trainer(object):
     def _create_iter(self, names, batch, shuffle):
         seed = self._seed.next()
         data = [self._dataset[i].iter(batch, shuffle=shuffle, seed=seed) for i in names]
-        return enumerate(izip(*data))
+        return enumerate(zip(*data))
 
     def _test(self, test_data, batch):
         self.task = 'test'
@@ -1746,20 +1746,29 @@ class trainer(object):
 # ======================================================================
 # Data Preprocessing
 # ======================================================================
-def _create_batch(n_samples, batch_size, start=None, end=None, shuffle=True, seed=None):
+def create_batch(n_samples, batch_size, start=None, end=None, prng=None):
     '''
+    Parameters
+    ----------
+    prng : numpy.random.RandomState
+        if None, no shuffle performed
+
     Example
     -------
-        > _create_batch(100, 2, start=50, end=100)
-        > 3 blocks: [(50, 66), (67, 83), (84, 99)]
-        > (50,66):
-            [
-                random_permutation:[1,2,17,19,6,11,18,10,13,3,
-                                    12,7,15,0,16,5,8,4,14,9])
-                batches: [(50, 51),(52, 53),(54, 55),(56, 57),
-                          (58, 59),(60, 61),(62, 63),(64, 65),
-                          (66, 67),(68, 69)]
-            ]
+    >>> create_batch(100, 2, start=50, end=100)
+    >>> 3 blocks: [(50, 67), (67, 84), (84, 100)]
+    >>> (
+    >>>     (50, 67), # block_idx
+    >>>     [2, 6, 13, 1, 16, 3, 10, 7, 11, 0, 15, 5, 8, 4, 12, 14, 9], # permutation
+    >>>     [(0, 2), (2, 4), (4, 6), (6, 8), (8, 10), (10, 12), (12, 14), (14, 16), (16, 17)], # batches_idx
+    >>> )
+
+    Notes
+    -----
+    If you want to generate similar batch everytime, set the same seed before
+    call this methods
+    For odd number of batch and block, a goal of Maximize number of n_block and
+    n_batch are applied
     '''
     #####################################
     # 1. Validate arguments.
@@ -1773,15 +1782,12 @@ def _create_batch(n_samples, batch_size, start=None, end=None, shuffle=True, see
         end = int(end * n_samples)
     n_samples = end - start
 
-    if seed is None: # makesure all iterator give same order
-        seed = MAGIC_SEED
-    np.random.seed(seed)
     #####################################
     # 2. Init.
     block_size = 8 * batch_size # load big block, then yield smaller batches
     idx = np.arange(start, end)
-    # this will consume a lot RAM memory
-    n_block = max(int(np.ceil(n_samples / block_size)), 1)
+    # this will consume a less RAM memory
+    n_block = max(int(math.ceil(n_samples / block_size)), 1)
 
     #####################################
     # 3. Start.
@@ -1791,43 +1797,92 @@ def _create_batch(n_samples, batch_size, start=None, end=None, shuffle=True, see
     for j in block_jobs:
         n_batch = max(int(np.ceil(len(j) / batch_size)), 1)
         job = mpi.segment_job(j, n_batch)
-        batch_jobs.append([(i[0], i[-1]) for i in job])
-    jobs = OrderedDict()
-    for i, j in izip(block_jobs, batch_jobs):
-        if shuffle:
-            idx = np.random.permutation(len(i))
+        # convert idx start from 0 by (- j[0]) (start of block)
+        # and include last element by (+ 1) because indexing will exclude last ones
+        batch_jobs.append([(i[0] - j[0], i[-1] - j[0] + 1) for i in job])
+    jobs = []
+    for i, j in zip(block_jobs, batch_jobs):
+        if prng is not None:
+            idx = prng.permutation(len(i))
         else:
             idx = range(len(i))
-        jobs[(i[0], i[-1])] = (idx, j)
+        jobs.append(
+            ((i[0], i[-1] + 1), idx, j)
+        )
+
+    if prng is not None:
+        prng.shuffle(jobs)
     return jobs
+
+def _hdf5_get_all_dataset(hdf, fileter_func=None, path='/'):
+    res = []
+    # init queue
+    q = queue()
+    for i in hdf[path].keys():
+        q.put(i)
+    # get list of all file
+    while not q.empty():
+        p = q.pop()
+        if 'Dataset' in str(type(hdf[p])):
+            if fileter_func is not None and not fileter_func(p):
+                continue
+            res.append(p)
+        elif 'Group' in str(type(hdf[p])):
+            for i in hdf[p].keys():
+                q.put(p + '/' + i)
+    return res
+
+def _hdf5_append_to_dataset(hdf_dataset, data):
+    curr_size = hdf_dataset.shape[0]
+    hdf_dataset.resize(curr_size + data.shape[0], 0)
+    hdf_dataset[curr_size:] = data
 
 class _batch(object):
 
     """docstring for _batch"""
 
-    def __init__(self, dataset, name):
+    def __init__(self, key, hdf):
         super(_batch, self).__init__()
-        if (dataset is None or name is None):
-            raise AttributeError('Must specify (hdf,name) or data')
-        self._dataset = dataset
-        self._name = name
+        if len(key) != len(hdf):
+            raise ValueError('[key] and [hdf] must be equal size')
+        self._key = key
+        self._hdf = hdf
+        self._data = []
 
-        self._data = None
-        if self._name in self._dataset.hdf:
-            self._data = dataset.hdf[name]
+        for key, hdf in zip(self._key, self._hdf):
+            if key in hdf:
+                self._data.append(hdf[key])
+
+        if len(self._data) > 0 and len(self._data) != len(self._hdf):
+            raise ValueError('Not all [hdf] file contain given [key]')
+
+    def _check(self, shape, dtype):
+        # if not exist create initial dataset
+        if len(self._data) == 0:
+            for key, hdf in zip(self._key, self._hdf):
+                if key not in hdf:
+                    hdf.create_dataset(key, dtype=dtype, chunks=True,
+                        shape=(0,) + shape[1:], maxshape=(None, ) + shape[1:])
+                self._data.append(hdf[key])
+
+        # check shape match
+        for d in self._data:
+            if d.shape[1:] != shape[1:]:
+                raise TypeError('Shapes not match ' + str(d.shape) + ' - ' + str(shape))
 
     # ==================== Properties ==================== #
     @property
     def shape(self):
-        return self._data.shape
+        s = sum([i.shape[0] for i in self._data])
+        return (s,) + i.shape[1:]
 
     @property
     def dtype(self):
-        return self._data.dtype
+        return self._data[0].dtype
 
     @property
     def value(self):
-        return self._data.value
+        return np.concatenate([i.value for i in self._data], axis=0)
 
     # ==================== Arithmetic ==================== #
     def sum2(self, axis=0):
@@ -1896,75 +1951,204 @@ class _batch(object):
         v = v2 - 1 / n * np.power(v1, 2)
         return v / n
 
-    # ==================== Safty first ==================== #
-
-    def _append_data(self, data):
-        curr_size = self._data.shape[0]
-        self._data.resize(curr_size + data.shape[0], 0)
-        self._data[curr_size:] = data
-
-    def _check_data(self, shape, dtype):
-        if self._data is None:
-            if self._name not in self._dataset:
-                self._dataset.hdf.create_dataset(self._name, dtype=dtype,
-                    shape=(0,) + shape[1:], maxshape=(None, ) + shape[1:], chunks=True)
-            self._data = self._dataset.hdf[self._name]
-
-        if self._data.shape[1:] != shape[1:]:
-            raise TypeError('Shapes not match ' + str(self.shape) + ' - ' + str(shape))
-
     # ==================== manupilation ==================== #
     def append(self, other):
         if not isinstance(other, np.ndarray):
-            raise TypeError('Addition only for numpy ndarray')
-        self._check_data(other.shape, other.dtype)
-        self._append_data(other)
+            raise TypeError('Append only support numpy ndarray')
+        self._check(other.shape, other.dtype)
+        for d in self._data:
+            _hdf5_append_to_dataset(d, other)
         return self
 
     def duplicate(self, other):
         if not isinstance(other, int):
-            raise TypeError('Only mutilply with int')
-        if self._data is None:
+            raise TypeError('Only duplicate by int factor')
+        if len(self._data) == 0:
             raise TypeError("Data haven't initlized yet")
-        copy = self._data[:]
-        for i in xrange(other - 1):
-            self._append_data(copy)
+        for d in self._data:
+            copy = d[:]
+            for i in xrange(other - 1):
+                _hdf5_append_to_dataset(d, copy)
         return self
 
-    def iter(self, batch_size, start=None, end=None,
-        shuffle=True, seed=None, normalizer=None):
-        block_batch = _create_batch(self.shape[0], batch_size,
-                                    start, end, shuffle, seed)
-        for block, idx_batches in block_batch.iteritems():
-            data = self._data[block[0]:block[1] + 1]
-            idx = idx_batches[0]
-            batches = idx_batches[1]
-            data = data[idx]
+    def _iter_fast(self, ds, batch_size, start=None, end=None,
+            shuffle=True, seed=None, normalizer=None):
+        # craete random seed
+        prng = None
+        if shuffle:
+            if seed is None:
+                seed = MAGIC_SEED
+            prng = RandomState(seed)
 
+        block_batch = create_batch(ds.shape[0], batch_size, start, end, prng)
+        for block, idx, batches in block_batch:
+            data = ds[block[0]:block[1]][idx]
             # return smaller batches
             for b in batches:
-                s = b[0] - block[0]
-                e = b[1] - block[0] + 1
-                if normalizer is not None:
-                    yield normalizer(data[s:e])
+                if normalizer is None:
+                    yield data[b[0]:b[1]]
                 else:
-                    yield data[s:e]
+                    yield normalizer(data[b[0]:b[1]])
+
+    def _iter_slow(self, batch_size=128, start=None, end=None,
+        shuffle=True, seed=None, normalizer=None, mode=0):
+        # ====== Set random seed ====== #
+        all_ds = self._data[:]
+        prng = None
+        if shuffle:
+            if seed is None:
+                seed = MAGIC_SEED
+            prng = RandomState(seed)
+            prng.shuffle(all_ds)
+
+        all_size = [i.shape[0] for i in all_ds]
+        n_dataset = len(all_ds)
+
+        # ====== Prepare ====== #
+        all_batch_size = []
+        if mode == 1:
+            all_batch_size = [int(math.ceil(batch_size / n_dataset)) for i in xrange(n_dataset)]
+        elif mode == 2:
+            s = sum(all_size)
+            all_batch_size = [int(math.ceil(batch_size * float(i / s))) for i in all_size]
+        else:
+            all_batch_size = [batch_size for i in xrange(n_dataset)]
+
+        # ====== Create all block and batches ====== #
+        # [ ((idx1, batch1), (idx2, batch2), ...), # batch 1
+        #   ((idx1, batch1), (idx2, batch2), ...), # batch 2
+        #   ... ]
+        all_block_batch = []
+        # contain [block_batches1, block_batches2, ...]
+        tmp_block_batch = []
+        tmp_block_batch_len = []
+        for n, bs in zip(all_size, all_batch_size): # block_batch for each data
+            block_batch = create_batch(n, bs, start, end, prng)
+            tmp_block_batch.append(block_batch)
+            tmp_block_batch_len.append(len(block_batch))
+
+        # ====== Distribute block and batches ====== #
+        if mode == 1:
+            maxlen = max(tmp_block_batch_len)
+            idx = []
+            for i in tmp_block_batch:
+                t = [j % len(i) for j in xrange(maxlen)]
+                if prng is not None:
+                    prng.shuffle(t)
+                idx.append(t)
+            for i in xrange(maxlen):
+                all_block_batch.append(
+                    # j:dataset_idx, i:block_batch_idx
+                    [(j, tmp_block_batch[j][idx[j][i]]) for j in xrange(n_dataset)]
+                )
+        elif mode == 2:
+            for i in zip_longest(*tmp_block_batch):
+                all_block_batch.append([(k, v) for k, v in enumerate(i) if v is not None])
+        else:
+            for i, bb in enumerate(tmp_block_batch):
+                for j in bb:
+                    # i = dataset_idx
+                    # j = (block, permutaion, batches)
+                    all_block_batch.append([(i, j)])
+
+        # remain print if you want debug
+        # for _ in all_block_batch:
+        #     for i, j in _:
+        #         print('ds:', i)
+        #         print('  ', j[0])
+        #         print(j[1])
+        #         print(j[2])
+        #     print('===== End =====')
+        # ====== return iteration ====== #
+        for _ in all_block_batch: # each _ is a block
+            # [ (batch1, batch2, ...), # for ds1
+            #   (batch1, batch2, ...), # for ds2
+            #    ... ]
+            batches = []
+            for i, j in _: # i=dataset_idx; j=(block, permutation, batches)
+                ds = all_ds[i]
+                block = ds[j[0][0]:j[0][1]][j[1]]
+                batches.append([block[b[0]:b[1]] for b in j[2]])
+
+            for b in zip_longest(*batches):
+                b = np.concatenate([i for i in b if i is not None], axis=0)
+                if normalizer is None:
+                    yield b
+                else:
+                    yield normalizer(b)
+
+    def iter(self, batch_size=128, start=None, end=None,
+        shuffle=True, seed=None, normalizer=None, mode=0):
+        ''' Create iteration for all dataset contained in this _batch
+
+        Parameters
+        ----------
+        batch_size : int
+            size of each batch (data will be loaded in big block 8 times
+            larger than this size)
+        start : int
+        end : int
+        shuffle : bool, str
+            wheather enable shuffle
+        seed : int
+        normalizer : callable, function
+            funciton will be applied to each batch before return
+        mode : 0, 1, 2
+            0 - default, read one by one each dataset
+            1 - equally read each dataset, upsampling smaller dataset
+                (e.g. batch_size=512, there are 5 dataset => each dataset
+                102 samples) (only work if batch size << dataset size)
+            2 - proportionately read each dataset (e.g. batch_size=512,
+                dataset1_size=1000, dataset2_size=500 => ds1=341, ds2=170)
+
+        Returns
+        -------
+        return : generator
+            generator generate batches of data
+
+        Notes
+        -----
+        This method is thread-safe, as it uses private instance of RandomState,
+        the order will be preserved if using iter in multi thread.
+        To create consistent permutation of shuffled dataset, you must:
+         - both batch have the same number and order of dataset
+         - using the same seed and mode when calling iter()
+         Hint: small level of batch shuffle can be obtained by using normalizer
+         function
+        '''
+        if len(self._data) == 1:
+            return self._iter_fast(self._data[0], batch_size, start, end,
+                                   shuffle, seed, normalizer)
+        else:
+            return self._iter_slow(batch_size, start, end, shuffle, seed,
+                                   normalizer, mode)
 
     def __len__(self):
-        return self._data.shape[0]
+        return sum([i.shape[0] for i in self._data])
 
     def __getitem__(self, key):
-        return self._data[key]
+        if type(key) == tuple:
+            return np.concatenate([d[k] for k, d in zip(key, self._data) if k is not None], axis=0)
+        return np.concatenate([i[key] for i in self._data], axis=0)
 
     def __setitem__(self, key, value):
-        self._check_data(value.shape, value.dtype)
+        self._check(value.shape, value.dtype)
         if isinstance(key, slice):
-            self._data[key] = value
+            for d in self._data:
+                d[key] = value
+        elif isinstance(key, tuple):
+            for k, d in zip(key, self._data):
+                if k is not None:
+                    d[k] = value
 
     def __str__(self):
-        if self._data is None:
-            return 'None'
-        return '<' + self._name + ' ' + str(self.shape) + ' ' + str(self.dtype) + '>'
+        if len(self._data) == 0:
+            return '<batch: None>'
+        s = '<batch: '
+        for k, d in zip(self._key, self._data):
+            s += '[%s,%s,%s]-' % (k, d.shape, d.dtype)
+        s = s[:-1] + '>'
+        return s
 
 class dataset(object):
 
@@ -2020,15 +2204,32 @@ class dataset(object):
     def __init__(self, path, mode='r'):
         super(dataset, self).__init__()
 
-        self.hdf = h5py.File(path, mode=mode)
-        self._path = path
+        if type(path) not in (list, tuple):
+            path = [path]
+
+        if len(path) > 1 and mode == 'w':
+            raise ValueError('No write support for multiple hdf5 files')
+
+        self._hdf = []
+        # map: ("ds_name1","ds_name2",...): <_batch object>
         self._datamap = {}
+        # map: "ds_name":[hdf1, hdf2, ...]
+        self._index = defaultdict(list)
+        for p in path:
+            f = h5py.File(p, mode=mode)
+            self._hdf.append(f)
+            ds = _hdf5_get_all_dataset(f)
+            for i in ds:
+                self._index[i].append(f)
 
-        self._start = 0
-        self._end = -1
+    # ==================== Set and get ==================== #
+    def set_read_mode(self):
+        pass
 
-    # ==================== Arithmetic ==================== #
-    def all_dataset(self, fileter_func=None, path='/'):
+    def set_write_mode(self, index=-1):
+        pass
+
+    def get_all_dataset(self, fileter_func=None, path='/'):
         ''' Get all dataset contained in the hdf5 file.
 
         Parameters
@@ -2044,25 +2245,15 @@ class dataset(object):
         return : list(str)
             names of all dataset
         '''
-        res = []
-        # init queue
-        q = queue()
-        for i in self.hdf[path].keys():
-            q.put(i)
-        # get list of all file
-        while not q.empty():
-            p = q.pop()
-            if 'Dataset' in str(type(self.hdf[p])):
-                if fileter_func is not None and not fileter_func(p):
-                    continue
-                res.append(p)
-            elif 'Group' in str(type(self.hdf[p])):
-                for i in self.hdf[p].keys():
-                    q.put(p + '/' + i)
-        return res
+        all_dataset = []
+        for i in self._hdf:
+            all_dataset += _hdf5_get_all_dataset(i, fileter_func, path)
+        return all_dataset
 
     # ==================== Main ==================== #
     def __getitem__(self, key):
+        ds = self._index[key] # list of all dataset contain given key
+
         if key not in self._datamap:
             # return string directly
             if key in self.hdf and self.hdf[key].dtype == np.dtype('O'):
@@ -2091,20 +2282,25 @@ class dataset(object):
         return key in self.hdf
 
     def close(self):
-        self.hdf.close()
+        try:
+            for i in self._hdf:
+                i.close()
+        except:
+            pass
 
     def __del__(self):
         try:
-            self.hdf.close()
-            del self.hdf
+            for i in self._hdf:
+                i.close()
+            del self._hdf
         except:
             pass
 
     def __str__(self):
-        all_data = self.all_dataset()
+        all_data = self.get_all_dataset()
         all_data = [(d, str(self.hdf[d].shape), str(self.hdf[d].dtype)) for d in all_data]
         s = '\n'
-        s += ' - path:' + str(self._path) + '\n'
+        s += ' - path:' + str('path here') + '\n'
         for i in all_data:
             s += ' - name:%s  shape:%s  dtype:%s' % i + '\n'
         return s
@@ -2598,7 +2794,7 @@ class speech():
             y_pred = [y_pred]
 
         results = []
-        for ytrue, ypred in izip(y_true, y_pred):
+        for ytrue, ypred in zip(y_true, y_pred):
             results.append(speech.LevenshteinDistance(ytrue, ypred) / len(ytrue))
         if return_mean:
             return np.mean(results)
