@@ -38,6 +38,7 @@ print('***********************************************')
 print('************ Single: Reading test! ************')
 print('***********************************************')
 ds = dnntoolkit.dataset('tmp.hdf', mode='r')
+print('Access all value:', np.sum(ds['X'][:] - ds['y'][:])) #return 0
 
 result = []
 X = ds['X'].iter(5, start=0.0, end=1.0, shuffle=True)
@@ -68,12 +69,16 @@ print('************ Reading test! ************')
 print('***************************************')
 ds = dnntoolkit.dataset(['tmp1.hdf', 'tmp2.hdf'], mode='r')
 print(ds)
+# access instance object
 print(ds['a'])
+print(ds['a', 'b'])
+print(ds['c'])
+# access array
+print(ds['c'][:])
 print(ds['X1'])
-
 print(ds['X1', 'X3'])
 print(ds['Y1', 'Y3'])
-print(np.sum(ds['X1', 'X3'][:] + ds['Y1', 'Y3'][:]))
+print('All values:', np.sum(ds['X1', 'X3'][:] + ds['Y1', 'Y3'][:])) # return 0
 
 result = []
 X = ds['X1', 'X3'].iter(3, shuffle = True, mode = 0)
