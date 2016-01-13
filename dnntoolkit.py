@@ -2214,6 +2214,8 @@ class dataset(object):
                 else:
                     self._index[i].append(f)
 
+        self._isclose = False
+
     # ==================== Set and get ==================== #
     def set_write(self, mode):
         '''
@@ -2223,6 +2225,9 @@ class dataset(object):
             specify which hdf files will be used for write
         '''
         self._write_mode = mode
+
+    def is_close(self):
+        return self._isclose
 
     def get_all_dataset(self, fileter_func=None, path='/'):
         ''' Get all dataset contained in the hdf5 file.
@@ -2350,6 +2355,7 @@ class dataset(object):
                 i.close()
         except:
             pass
+        self._isclose = True
 
     def __del__(self):
         try:
@@ -2358,15 +2364,19 @@ class dataset(object):
             del self._hdf
         except:
             pass
+        self._isclose = True
 
     def __str__(self):
         s = 'Dataset contains: %d (files)' % len(self._hdf) + '\n'
-        for hdf in self._hdf:
-            s += '======== %s ========' % hdf.filename + '\n'
-            all_data = _hdf5_get_all_dataset(hdf)
-            all_data = [(d, str(hdf[d].shape), str(hdf[d].dtype)) for d in all_data]
-            for i in all_data:
-                s += ' - name:%-13s  shape:%-18s  dtype:%s' % i + '\n'
+        if self._isclose:
+            s += '******** Closed ********\n'
+        else:
+            for hdf in self._hdf:
+                s += '======== %s ========' % hdf.filename + '\n'
+                all_data = _hdf5_get_all_dataset(hdf)
+                all_data = [(d, str(hdf[d].shape), str(hdf[d].dtype)) for d in all_data]
+                for i in all_data:
+                    s += ' - name:%-13s  shape:%-18s  dtype:%s' % i + '\n'
         return s[:-1]
 
     # ==================== Static loading ==================== #
