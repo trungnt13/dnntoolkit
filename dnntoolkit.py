@@ -402,7 +402,7 @@ class tensor():
         return chunks
 
     @staticmethod
-    def ordered_set(seq):
+    def set_ordered(seq):
        seen = {}
        result = []
        for marker in seq:
@@ -423,7 +423,7 @@ class tensor():
 
         Notes
         -----
-        Different from ordered_set, the resulted array still contain duplicate
+        Different from set_ordered, the resulted array still contain duplicate
         if they a far away each other.
         '''
         maxdist = max(1, maxdist)
