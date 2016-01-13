@@ -33,6 +33,7 @@ import os
 import sys
 import math
 import time
+import warnings
 from stat import S_ISDIR
 
 from six.moves import zip, zip_longest
@@ -401,6 +402,16 @@ class tensor():
         return chunks
 
     @staticmethod
+    def ordered_set(seq):
+       seen = {}
+       result = []
+       for marker in seq:
+           if marker in seen: continue
+           seen[marker] = 1
+           result.append(marker)
+       return result
+
+    @staticmethod
     def shrink_labels(labels, maxdist=1):
         '''
         Example
@@ -409,22 +420,24 @@ class tensor():
         >>> [0, 1, 0, 1, 0, 4, 5, 4, 6, 0]
         >>> print(shrink_labels(np.array([0, 0, 1, 0, 1, 1, 0, 0, 4, 5, 4, 6, 6, 0, 0]), 2))
         >>> [0, 1, 0, 4, 6, 0]
+
+        Notes
+        -----
+        Different from ordered_set, the resulted array still contain duplicate
+        if they a far away each other.
         '''
         maxdist = max(1, maxdist)
-
         out = []
-        l = max(labels.shape)
+        l = len(labels)
         i = 0
         while i < l:
             out.append(labels[i])
             last_val = labels[i]
-
             dist = min(maxdist, l - i - 1)
             j = 1
             while (i + j < l and labels[i + j] == last_val) or (j < dist):
                 j += 1
             i += j
-
         return out
 
     # ======================================================================
@@ -1843,8 +1856,13 @@ class _batch(object):
 
     def __init__(self, key, hdf):
         super(_batch, self).__init__()
+        if type(key) not in (tuple, list):
+            key = [key]
+        if type(hdf) not in (tuple, list):
+            hdf = [hdf]
         if len(key) != len(hdf):
             raise ValueError('[key] and [hdf] must be equal size')
+
         self._key = key
         self._hdf = hdf
         self._data = []
@@ -2154,66 +2172,36 @@ class _batch(object):
 class dataset(object):
 
     '''
-        Example
-        -------
-            def normalization(x):
-                return x.astype(np.float32)
+    dataset object to manage multiple hdf5 file
 
-            d = dnntoolkit.dataset('tmp.hdf', 'w')
-            d['X'] = np.zeros((2, 3))
-            print('X' in d)
-            >>> True
-
-            d['X'][:1] = np.ones((1, 3))
-            print(d['X'][:])
-            >>> [[1,1,1],
-            >>>  [0,0,0]]
-
-            for i in xrange(2):
-                d['X'] += np.ones((1, 3))
-            print(d['X'][:])
-            >>> [[1,1,1],
-            >>>  [0,0,0],
-            >>>  [1,1,1],
-            >>>  [1,1,1]]
-
-            d['X'] *= 2 # duplicate the data
-            print(d['X'][:])
-            >>> [[1,1,1],
-            >>>  [0,0,0],
-            >>>  [1,1,1],
-            >>>  [1,1,1],
-            >>>  [1,1,1],
-            >>>  [0,0,0],
-            >>>  [1,1,1],
-            >>>  [1,1,1]]
-
-            for i in d['X']: # shuffle configuration inherit from dataset
-                print(str(i.shape) + '-' + str(i.dtype))
-            >>> (2,3) - float64
-            >>> (2,3) - float64
-            >>> (2,3) - float64
-            >>> (2,3) - float64
-
-            d.shuffle_data() # for new order of data
-            for i in d['X'].iter(shuffle=True):
-                print(str(i.shape) + '-' + str(i.dtype))
-
-            d.close()
+    Note
+    ----
+    dataset['X1', 'X2']: will search for 'X1' in all given files, then 'X2',
+    then 'X3' ...
+    iter(batch_size, start, end, shuffle, seed, normalizer, mode)
+        mode : 0, 1, 2
+            0 - default, read one by one each dataset
+            1 - equally read each dataset, upsampling smaller dataset
+                (e.g. batch_size=512, there are 5 dataset => each dataset
+                102 samples) (only work if batch size << dataset size)
+            2 - proportionately read each dataset (e.g. batch_size=512,
+                dataset1_size=1000, dataset2_size=500 => ds1=341, ds2=170)
     '''
 
     def __init__(self, path, mode='r'):
         super(dataset, self).__init__()
-
+        self._mode = mode
         if type(path) not in (list, tuple):
             path = [path]
-
-        if len(path) > 1 and mode == 'w':
-            raise ValueError('No write support for multiple hdf5 files')
 
         self._hdf = []
         # map: ("ds_name1","ds_name2",...): <_batch object>
         self._datamap = {}
+        self._write_mode = None
+
+        # all dataset have dtype('O') type will be return directly
+        self._object = defaultdict(list)
+        obj_type = np.dtype('O')
         # map: "ds_name":[hdf1, hdf2, ...]
         self._index = defaultdict(list)
         for p in path:
@@ -2221,14 +2209,20 @@ class dataset(object):
             self._hdf.append(f)
             ds = _hdf5_get_all_dataset(f)
             for i in ds:
-                self._index[i].append(f)
+                if f[i].dtype == obj_type:
+                    self._object[i].append(f)
+                else:
+                    self._index[i].append(f)
 
     # ==================== Set and get ==================== #
-    def set_read_mode(self):
-        pass
-
-    def set_write_mode(self, index=-1):
-        pass
+    def set_write(self, mode):
+        '''
+        Parameters
+        ----------
+        mode : 'all', 'last', int(index), slice
+            specify which hdf files will be used for write
+        '''
+        self._write_mode = mode
 
     def get_all_dataset(self, fileter_func=None, path='/'):
         ''' Get all dataset contained in the hdf5 file.
@@ -2252,35 +2246,103 @@ class dataset(object):
         return all_dataset
 
     # ==================== Main ==================== #
-    def __getitem__(self, key):
-        ds = self._index[key] # list of all dataset contain given key
+    def _get_write_hdf(self):
+        '''Alawys return list of hdf5 files'''
+        # ====== Only 1 file ====== #
+        if len(self._hdf) == 1:
+            return self._hdf
 
-        if key not in self._datamap:
-            # return string directly
-            if key in self.hdf and self.hdf[key].dtype == np.dtype('O'):
-                return self.hdf[key]
-            # return batch object to handle
-            else:
-                self._datamap[key] = _batch(self, key)
-        return self._datamap[key]
+        # ====== Multple files ====== #
+        if self._write_mode is None:
+            warnings.warn('Have not set write mode, default is [last]', RuntimeWarning)
+            self._write_mode = 'last'
+
+        if self._write_mode == 'last':
+            return [self._hdf[-1]]
+        elif self._write_mode == 'all':
+            return self._hdf
+        elif isinstance(self._write_mode, str):
+            return [h for h in self._hdf if h.filename == self._write_mode]
+        elif type(self._write_mode) in (tuple, list):
+            if isinstance(self._write_mode[0], int):
+                return [self._hdf[i] for i in self._write_mode]
+            else: # search all file with given name
+                hdf = []
+                for k in self._write_mode:
+                    for h in self._hdf:
+                        if h.filename == k:
+                            hdf.append(h)
+                            break
+                return hdf
+        else: # int or slice index
+            hdf = self._hdf[self._write_mode]
+            if type(hdf) not in (tuple, list):
+                hdf = [hdf]
+            return hdf
+
+    def __getitem__(self, key):
+        if type(key) not in (tuple, list):
+            key = [key]
+
+        # ====== Return object ====== #
+        ret = []
+        for k in key:
+            if k in self._object:
+                ret += [i[k].value for i in self._object[k]]
+        if len(ret) == 1:
+            return ret[0]
+        elif len(ret) > 0:
+            return ret
+
+        # ====== Return _batch ====== #
+        keys = []
+        for k in key:
+            hdf = self._index[k]
+            if len(hdf) == 0 and self._mode != 'r': # write mode activated
+                hdf = self._get_write_hdf()
+            ret += hdf
+            keys += [k] * len(hdf)
+        idx = tuple(keys + ret)
+
+        if idx in self._datamap:
+            return self._datamap[idx]
+        batch = _batch(keys, ret)
+        self._datamap[idx] = batch
+        return batch
 
     def __setitem__(self, key, value):
+        # check input
+        if self._mode == 'r':
+            raise RuntimeError('No write is allowed in read mode')
+        if type(key) not in (tuple, list):
+            key = [key]
+
         # set str value directly
-        if isinstance(value, str):
-            self.hdf[key] = value
-        # array
-        else:
-            if key not in self.hdf:
-                if hasattr(value, 'dtype'):
-                    self.hdf.create_dataset(key, data=value, dtype=value.dtype,
-                        maxshape=(None,) + value.shape[1:], chunks=True)
-                else:
-                    self.hdf[key] = value
-            if key not in self._datamap:
-                self._datamap[key] = _batch(self, key)
+        if isinstance(value, str) or \
+            (hasattr(value, 'dtype') and value.dtype == object):
+            hdf = self._get_write_hdf()
+            for i in hdf:
+                for j in key:
+                    i[j] = value
+                    self._object[j].append(i)
+        else: # array
+            # find appropriate key
+            hdf = self._get_write_hdf()
+            print(hdf)
+            for k in key:
+                for h in hdf:
+                    if k in h:
+                        h[k][:] = value
+                    else:
+                        h[k] = value
+                        self._index[k].append(h)
 
     def __contains__(self, key):
-        return key in self.hdf
+        r = False
+        for hdf in self._hdf:
+            if key in hdf:
+                r += 1
+        return r
 
     def close(self):
         try:
@@ -2298,13 +2360,14 @@ class dataset(object):
             pass
 
     def __str__(self):
-        all_data = self.get_all_dataset()
-        all_data = [(d, str(self.hdf[d].shape), str(self.hdf[d].dtype)) for d in all_data]
-        s = '\n'
-        s += ' - path:' + str('path here') + '\n'
-        for i in all_data:
-            s += ' - name:%s  shape:%s  dtype:%s' % i + '\n'
-        return s
+        s = 'Dataset contains: %d (files)' % len(self._hdf) + '\n'
+        for hdf in self._hdf:
+            s += '======== %s ========' % hdf.filename + '\n'
+            all_data = _hdf5_get_all_dataset(hdf)
+            all_data = [(d, str(hdf[d].shape), str(hdf[d].dtype)) for d in all_data]
+            for i in all_data:
+                s += ' - name:%-8s  shape:%-16s  dtype:%-8s' % i + '\n'
+        return s[:-1]
 
     # ==================== Static loading ==================== #
     @staticmethod
