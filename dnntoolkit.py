@@ -2366,7 +2366,7 @@ class dataset(object):
             all_data = _hdf5_get_all_dataset(hdf)
             all_data = [(d, str(hdf[d].shape), str(hdf[d].dtype)) for d in all_data]
             for i in all_data:
-                s += ' - name:%-8s  shape:%-16s  dtype:%-8s' % i + '\n'
+                s += ' - name:%-13s  shape:%-18s  dtype:%s' % i + '\n'
         return s[:-1]
 
     # ==================== Static loading ==================== #
