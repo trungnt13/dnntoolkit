@@ -135,18 +135,6 @@ def _create_slurm_gpu(task_name, duration, delay, command, n_gpu=1, mem=15000):
     os.remove('tmp_train_gpu.slurm')
     return slurm_text
 
-def gpu_theano(task_name, duration, script, n_gpu=1, mem=15000, delay=0):
-    if isinstance(script, str) or not hasattr(script, '__len__'):
-        script = [script]
-    running_prefix = 'THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python '
-    running_script = ''
-    for s in script:
-        running_script += running_prefix
-        running_script += s # path to script
-        running_script += ';'
-    running_script = running_script[:-1]
-    _create_slurm_gpu(task_name, duration, delay, running_script, n_gpu, mem)
-
 def gpu(task_name, duration, script, n_gpu=1, mem=15000, delay=0):
     if isinstance(script, str) or not hasattr(script, '__len__'):
         script = [script]
@@ -179,7 +167,7 @@ def _create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000)
         n_node = 1
     else:
         n_node = math.ceil(nb_core / 16)
-    if mem > 2500:
+    if mem > 2500 and mem < 16000:
         n_node = max(n_node, math.ceil(mem / 2500))
 
     # ====== machine type ====== #
