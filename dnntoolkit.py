@@ -2072,7 +2072,7 @@ class _batch(object):
 
         Parameters
         ----------
-        batch_size : int
+        batch_size : int, 'auto'
             size of each batch (data will be loaded in big block 8 times
             larger than this size)
         start : int, float(0.0-1.0)
@@ -2108,6 +2108,9 @@ class _batch(object):
          function
         '''
         self._is_dataset_init()
+        if batch_size == 'auto':
+            batch_size = 128
+
         if len(self._data) == 1:
             return self._iter_fast(self._data[0], batch_size, start, end,
                                    shuffle, seed, normalizer)
