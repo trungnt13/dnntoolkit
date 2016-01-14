@@ -192,8 +192,6 @@ class mpi():
             >>>     f.close()
         '''
         if 'MPI' in globals() or 'mpi4py' in globals():
-            from mpi4py import MPI
-            comm = MPI.COMM_WORLD
             rank = comm.Get_rank()
             npro = comm.Get_size()
 
