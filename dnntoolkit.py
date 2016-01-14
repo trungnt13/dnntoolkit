@@ -154,44 +154,7 @@ class mpi():
         con_processes = multiprocessing.Process(target=con_func, args=(path, file_path))
         return div_processes, con_processes
 
-    @staticmethod
-    def preprocess_mpi(jobs_list, features_func, save_func, n_cache=30):
-        ''' Wrapped preprocessing procedure in MPI.
-                    root
-                / / / | \ \ \
-                features_func
-                \ \ \ | / / /
-                  save_func
-            * NO need call Barrier at the end of this methods
-        Parameters
-        ----------
-        jobs_list : list
-            [data_concern_job_1, job_2, ....]
-        features_func : function(job_i)
-            function object to extract feature from each job
-        save_func : function([job_i,...])
-            transfer all data to process 0 as a list for saving to disk
-        n_cache : int
-            maximum number of cache for each process before gathering the data
 
-        Example
-        -------
-            >>> jobs = range(1, 110)
-            >>> if rank == 0:
-            >>>     f = h5py.File('tmp.hdf5', 'w')
-            >>>     idx = 0
-            >>> def feature_extract(j):
-            >>>     return rank
-            >>> def save(j):
-            >>>     global idx
-            >>>     f[str(idx)] = str(j)
-            >>>     idx += 1
-            >>> dnntoolkit.mpi.preprocess_mpi(jobs, feature_extract, save, n_cache=5)
-            >>> if rank == 0:
-            >>>     f['idx'] = idx
-            >>>     f.close()
-        '''
-        pass
 
 # ======================================================================
 # io helper
