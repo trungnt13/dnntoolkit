@@ -1759,22 +1759,25 @@ class trainer(object):
 # ======================================================================
 # Data Preprocessing
 # ======================================================================
-def create_batch(n_samples, batch_size, start=None, end=None, prng=None):
+def create_batch(n_samples, batch_size, start=None, end=None, prng=None, upsample=None):
     '''
     Parameters
     ----------
     prng : numpy.random.RandomState
-        if None, no shuffle performed
+        if prng != None, the upsampling process will be randomized
+    upsample : int
+        upsample > n_samples, batch will be sampled from original data to make
+        the same total number of sample
 
     Example
     -------
-    >>> create_batch(100, 2, start=50, end=100)
-    >>> 3 blocks: [(50, 67), (67, 84), (84, 100)]
-    >>> (
-    >>>     (50, 67), # block_idx
-    >>>     [2, 6, 13, 1, 16, 3, 10, 7, 11, 0, 15, 5, 8, 4, 12, 14, 9], # permutation
-    >>>     [(0, 2), (2, 4), (4, 6), (6, 8), (8, 10), (10, 12), (12, 14), (14, 16), (16, 17)], # batches_idx
-    >>> )
+    >>> from numpy.random import RandomState
+    >>> create_batch(100, 17, start=0.0, end=1.0)
+    >>> [(0, 20), (20, 40), (40, 60), (60, 80), (80, 100)]
+    >>> create_batch(100, 17, start=0.0, end=1.0, upsample=130)
+    >>> [(0, 20), (20, 40), (40, 60), (60, 80), (80, 100), (0, 20), (20, 37)]
+    >>> create_batch(100, 17, start=0.0, end=1.0, prng=RandomState(12082518), upsample=130)
+    >>> [(0, 20), (20, 40), (40, 60), (60, 80), (80, 100), (20, 40), (80, 90)]
 
     Notes
     -----
@@ -1795,37 +1798,37 @@ def create_batch(n_samples, batch_size, start=None, end=None, prng=None):
         end = int(end * n_samples)
     n_samples = end - start
 
+    if upsample is None or upsample < n_samples:
+        upsample = n_samples
+
     #####################################
     # 2. Init.
-    block_size = 8 * batch_size # load big block, then yield smaller batches
-    idx = np.arange(start, end)
-    # this will consume a less RAM memory
-    n_block = max(int(math.ceil(n_samples / block_size)), 1)
+    idx = range(start, end)
+    n_batch = max(int(math.floor(n_samples / batch_size)), 1)
+    jobs = mpi.segment_job(idx, n_batch)
+    jobs = [(j[0], j[-1] + 1) for j in jobs if len(j) > 0]
 
     #####################################
-    # 3. Start.
-    # ceil is safer for GPU, expected worst case of smaller number of batch size
-    block_jobs = mpi.segment_job(idx, n_block)
-    batch_jobs = []
-    for j in block_jobs:
-        n_batch = max(int(np.ceil(len(j) / batch_size)), 1)
-        job = mpi.segment_job(j, n_batch)
-        # convert idx start from 0 by (- j[0]) (start of block)
-        # and include last element by (+ 1) because indexing will exclude last ones
-        batch_jobs.append([(i[0] - j[0], i[-1] - j[0] + 1) for i in job])
-    jobs = []
-    for i, j in zip(block_jobs, batch_jobs):
-        if prng is not None:
-            idx = prng.permutation(len(i))
-        else:
-            idx = range(len(i))
-        jobs.append(
-            ((i[0], i[-1] + 1), idx, j)
-        )
-
-    if prng is not None:
-        prng.shuffle(jobs)
-    return jobs
+    # 3. Upsample jobs.
+    upsample_jobs = []
+    n = n_samples
+    i = 0
+    while n < upsample:
+        # pick a package
+        if prng is None:
+            added_job = jobs[i % len(jobs)]
+            i += 1
+        elif prng is not None:
+            added_job = jobs[prng.randint(0, len(jobs))]
+        # remove redundant size
+        tmp = added_job[1] - added_job[0]
+        if n + tmp > upsample:
+            tmp = n + tmp - upsample
+            added_job = (added_job[0], added_job[1] - tmp)
+        n += added_job[1] - added_job[0]
+        # done
+        upsample_jobs.append(added_job)
+    return jobs + upsample_jobs
 
 def _hdf5_get_all_dataset(hdf, fileter_func=None, path='/'):
     res = []
@@ -1849,6 +1852,13 @@ def _hdf5_append_to_dataset(hdf_dataset, data):
     curr_size = hdf_dataset.shape[0]
     hdf_dataset.resize(curr_size + data.shape[0], 0)
     hdf_dataset[curr_size:] = data
+
+
+class _dummy_shuffle():
+
+    @staticmethod
+    def shuffle(x):
+        pass
 
 class _batch(object):
 
@@ -1992,45 +2002,55 @@ class _batch(object):
     def _iter_fast(self, ds, batch_size, start=None, end=None,
             shuffle=True, seed=None, normalizer=None):
         # craete random seed
-        prng = None
+        prng1 = None
+        prng2 = _dummy_shuffle
         if shuffle:
             if seed is None:
                 seed = MAGIC_SEED
-            prng = RandomState(seed)
+            prng1 = RandomState(seed)
+            prng2 = RandomState(seed)
 
-        block_batch = create_batch(ds.shape[0], batch_size, start, end, prng)
-        for block, idx, batches in block_batch:
-            data = ds[block[0]:block[1]][idx]
-            # return smaller batches
-            for b in batches:
-                if normalizer is None:
-                    yield data[b[0]:b[1]]
-                else:
-                    yield normalizer(data[b[0]:b[1]])
+        batches = create_batch(ds.shape[0], batch_size,
+            start, end, prng1)
+        prng2.shuffle(batches)
+
+        for i, j in batches:
+            data = ds[i:j]
+            prng2.shuffle(data) # this will slow thing a little bit
+            if normalizer is None:
+                yield data
+            else:
+                yield normalizer(data)
 
     def _iter_slow(self, batch_size=128, start=None, end=None,
         shuffle=True, seed=None, normalizer=None, mode=0):
         # ====== Set random seed ====== #
         all_ds = self._data[:]
-        prng = None
+        prng1 = None
+        prng2 = _dummy_shuffle
         if shuffle:
             if seed is None:
                 seed = MAGIC_SEED
-            prng = RandomState(seed)
-            prng.shuffle(all_ds) # shuffle datasets
+            prng1 = RandomState(seed)
+            prng2 = RandomState(seed)
 
         all_size = [i.shape[0] for i in all_ds]
         n_dataset = len(all_ds)
 
-        # ====== Prepare ====== #
-        all_batch_size = []
+        # ====== Calculate batch_size ====== #
         if mode == 1:
-            all_batch_size = [int(math.ceil(batch_size / n_dataset)) for i in xrange(n_dataset)]
+            maxsize = max(all_size)
+            all_batch_size = \
+                [int(math.ceil(batch_size / n_dataset)) for i in xrange(n_dataset)]
+            all_upsample = [maxsize for i in xrange(n_dataset)]
         elif mode == 2:
             s = sum(all_size)
-            all_batch_size = [int(math.ceil(batch_size * float(i / s))) for i in all_size]
+            all_batch_size = \
+                [int(math.ceil(batch_size * float(i / s))) for i in all_size]
+            all_upsample = all_size
         else:
             all_batch_size = [batch_size for i in xrange(n_dataset)]
+            all_upsample = all_size
 
         # ====== Create all block and batches ====== #
         # [ ((idx1, batch1), (idx2, batch2), ...), # batch 1
@@ -2039,60 +2059,35 @@ class _batch(object):
         all_block_batch = []
         # contain [block_batches1, block_batches2, ...]
         tmp_block_batch = []
-        tmp_block_batch_len = []
-        for n, bs in zip(all_size, all_batch_size): # block_batch for each data
-            block_batch = create_batch(n, bs, start, end, prng)
-            tmp_block_batch.append(block_batch)
-            tmp_block_batch_len.append(len(block_batch))
+        for n, batchsize, upsample in zip(all_size, all_batch_size, all_upsample):
+            tmp_block_batch.append(
+                create_batch(n, batchsize, start, end, prng1, upsample))
 
         # ====== Distribute block and batches ====== #
-        if mode == 1:
-            maxlen = max(tmp_block_batch_len)
-            idx = []
-            for i in tmp_block_batch:
-                t = [j % len(i) for j in xrange(maxlen)]
-                if prng is not None: # shuffle the upsampling
-                    prng.shuffle(t)
-                idx.append(t)
-            for i in xrange(maxlen):
-                all_block_batch.append(
-                    # j:dataset_idx, i:block_batch_idx
-                    [(j, tmp_block_batch[j][idx[j][i]]) for j in xrange(n_dataset)]
-                )
-        elif mode == 2:
+        if mode == 1 or mode == 2:
             for i in zip_longest(*tmp_block_batch):
                 all_block_batch.append([(k, v) for k, v in enumerate(i) if v is not None])
         else:
-            for i, bb in enumerate(tmp_block_batch):
-                for j in bb:
-                    # i=dataset_idx; j=(block, permutaion, batches)
-                    all_block_batch.append([(i, j)])
-
-        # remain print if you want debug
+            for i, batches in enumerate(tmp_block_batch):
+                for b in batches:
+                    all_block_batch.append( # i=dataset_idx; b=(batches)
+                        [(i, b)]
+                    )
+        prng2.shuffle(all_block_batch)
+        # print if you want debug
         # for _ in all_block_batch:
         #     for i, j in _:
-        #         print('ds:', i)
-        #         print('  ', j[0])
-        #         print(j[1])
-        #         print(j[2])
+        #         print('ds:', i, '  batch:', j)
         #     print('===== End =====')
         # ====== return iteration ====== #
         for _ in all_block_batch: # each _ is a block
-            # [ (batch1, batch2, ...), # for ds1
-            #   (batch1, batch2, ...), # for ds2
-            #    ... ]
-            batches = []
-            for i, j in _: # i=dataset_idx; j=(block, permutation, batches)
-                ds = all_ds[i]
-                block = ds[j[0][0]:j[0][1]][j[1]]
-                batches.append([block[b[0]:b[1]] for b in j[2]])
-
-            for b in zip_longest(*batches):
-                b = np.concatenate([i for i in b if i is not None], axis=0)
-                if normalizer is None:
-                    yield b
-                else:
-                    yield normalizer(b)
+            batches = np.concatenate(
+                [all_ds[i][j[0]:j[1]] for i, j in _], axis=0)
+            prng2.shuffle(batches)
+            if normalizer is None:
+                yield batches
+            else:
+                yield normalizer(batches)
 
     def iter(self, batch_size=128, start=None, end=None,
         shuffle=True, seed=None, normalizer=None, mode=0):
@@ -2147,7 +2142,9 @@ class _batch(object):
 
     def __getitem__(self, key):
         if type(key) == tuple:
-            return np.concatenate([d[k] for k, d in zip(key, self._data) if k is not None], axis=0)
+            return np.concatenate(
+                [d[k] for k, d in zip(key, self._data) if k is not None],
+                axis=0)
         return np.concatenate([i[key] for i in self._data], axis=0)
 
     def __setitem__(self, key, value):

@@ -47,8 +47,8 @@ X = dnntoolkit._batch(['X1', 'X3'], [f1, f2])
 y = dnntoolkit._batch(['Y1', 'Y3'], [f1, f2])
 y1 = dnntoolkit._batch(['Y'], [f2])
 
-start = 0.0
-end = 1.0
+start = 0.3
+end = 0.6
 shuffle = True
 mode = 2
 seed = 13
