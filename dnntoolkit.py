@@ -1511,11 +1511,10 @@ class trainer(object):
 
             # main cost
             cost = self._cost_func(*self.data)
-            print(cost)
-            if hasattr(cost, 'shape') and len(cost) > 0:
-                valid_cost += cost.tolist()
-            else:
+            if np.isscalar(cost):
                 valid_cost.append(cost)
+            else:
+                valid_cost += cost.tolist()
 
             if self._log_enable:
                 logger.progress(n, max_val=n_samples,
