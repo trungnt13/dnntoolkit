@@ -1511,7 +1511,7 @@ class trainer(object):
 
             # main cost
             cost = self._cost_func(*self.data)
-
+            print(cost)
             if hasattr(cost, 'shape') and len(cost) > 0:
                 valid_cost += cost.tolist()
             else:
