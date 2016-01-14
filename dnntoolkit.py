@@ -1792,6 +1792,16 @@ def create_batch(n_samples, batch_size, start=None, end=None, prng=None, upsampl
         upsample_jobs.append(added_job)
     return jobs + upsample_jobs
 
+def _auto_batch_size(shape):
+    # This method calculate based on reference to imagenet size
+    batch = 256
+    ratio = np.prod(shape[1:]) / (224 * 224 * 3)
+    batch /= ratio
+    for i in xrange(10):
+        if 2**i > batch:
+            return 2**(i-1)
+    return 128
+
 def _hdf5_get_all_dataset(hdf, fileter_func=None, path='/'):
     res = []
     # init queue
@@ -2109,7 +2119,7 @@ class _batch(object):
         '''
         self._is_dataset_init()
         if batch_size == 'auto':
-            batch_size = 128
+            batch_size = _auto_batch_size(self.shape)
 
         if len(self._data) == 1:
             return self._iter_fast(self._data[0], batch_size, start, end,
