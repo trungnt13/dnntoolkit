@@ -191,55 +191,7 @@ class mpi():
             >>>     f['idx'] = idx
             >>>     f.close()
         '''
-        if 'MPI' in globals() or 'mpi4py' in globals():
-            rank = comm.Get_rank()
-            npro = comm.Get_size()
-
-            #####################################
-            # 1. Scatter jobs for all process.
-            if rank == 0:
-                print('Process 0 found %d jobs' % len(jobs_list))
-                jobs = mpi.segment_job(jobs_list, npro)
-                n_loop = max([len(i) for i in jobs])
-            else:
-                jobs = None
-                n_loop = 0
-                print('Process %d waiting for Process 0!' % rank)
-            comm.Barrier()
-
-            jobs = comm.scatter(jobs, root=0)
-            n_loop = comm.bcast(n_loop, root=0)
-            print('Process %d receive %d jobs' % (rank, len(jobs)))
-
-            #####################################
-            # 2. Start preprocessing.
-            data = []
-
-            for i in xrange(n_loop):
-                if i % n_cache == 0 and i > 0:
-                    all_data = comm.gather(data, root=0)
-                    if rank == 0:
-                        print('Saving data at process 0')
-                        all_data = [k for j in all_data for k in j]
-                        if len(all_data) > 0:
-                            save_func(all_data)
-                    data = []
-
-                if i >= len(jobs): continue
-                feature = features_func(jobs[i])
-                if feature is not None:
-                    data.append(feature)
-
-                if i % 50 == 0:
-                    print('Rank:%d preprocessed %d files!' % (rank, i))
-
-            all_data = comm.gather(data, root=0)
-            if rank == 0:
-                print('Saving data before exit !!!!\n')
-                all_data = [k for j in all_data for k in j]
-                if len(all_data) > 0:
-                    save_func(all_data)
-
+        pass
 
 # ======================================================================
 # io helper
