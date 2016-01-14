@@ -167,8 +167,8 @@ def _create_slurm_cpu(task_name, duration, delay, command, nb_core=8, mem=15000)
         n_node = 1
     else:
         n_node = math.ceil(nb_core / 16)
-    if mem > 2500 and mem < 16000:
-        n_node = max(n_node, math.ceil(mem / 2500))
+    if mem * nb_core > 60000:
+        n_node = max(n_node, math.ceil((mem * nb_core) / 60000))
 
     # ====== machine type ====== #
     machine_type = 'serial'
