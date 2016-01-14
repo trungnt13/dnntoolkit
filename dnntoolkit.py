@@ -1864,23 +1864,31 @@ class _batch(object):
                 raise TypeError('Shapes not match ' + str(d.shape) + ' - ' + str(shape))
 
     # ==================== Properties ==================== #
+    def _is_dataset_init(self):
+        if len(self._data) == 0:
+            raise RuntimeError('Dataset have not initialized yet!')
+
     @property
     def shape(self):
+        self._is_dataset_init()
         s = sum([i.shape[0] for i in self._data])
-        print(s, i.shape[1:])
         return (s,) + i.shape[1:]
 
     @property
     def dtype(self):
+        self._is_dataset_init()
         return self._data[0].dtype
 
     @property
     def value(self):
+        self._is_dataset_init()
         return np.concatenate([i.value for i in self._data], axis=0)
 
     # ==================== Arithmetic ==================== #
     def sum2(self, axis=0):
         ''' sum(X^2) '''
+        self._is_dataset_init()
+
         s = 0
         isInit = False
         for X in self.iter(shuffle=False):
@@ -1900,6 +1908,8 @@ class _batch(object):
 
     def sum(self, axis=0):
         ''' sum(X) '''
+        self._is_dataset_init()
+
         s = 0
         isInit = False
         for X in self.iter(shuffle=False):
@@ -1918,10 +1928,14 @@ class _batch(object):
         return s
 
     def mean(self, axis=0):
+        self._is_dataset_init()
+
         s = self.sum(axis)
         return s / self.shape[axis]
 
     def var(self, axis=0):
+        self._is_dataset_init()
+
         v2 = 0
         v1 = 0
         isInit = False
@@ -2096,6 +2110,7 @@ class _batch(object):
          Hint: small level of batch shuffle can be obtained by using normalizer
          function
         '''
+        self._is_dataset_init()
         if len(self._data) == 1:
             return self._iter_fast(self._data[0], batch_size, start, end,
                                    shuffle, seed, normalizer)
@@ -2104,9 +2119,11 @@ class _batch(object):
                                    normalizer, mode)
 
     def __len__(self):
+        self._is_dataset_init()
         return sum([i.shape[0] for i in self._data])
 
     def __getitem__(self, key):
+        self._is_dataset_init()
         if type(key) == tuple:
             return np.concatenate(
                 [d[k] for k, d in zip(key, self._data) if k is not None],
@@ -2114,6 +2131,7 @@ class _batch(object):
         return np.concatenate([i[key] for i in self._data], axis=0)
 
     def __setitem__(self, key, value):
+        self._is_dataset_init()
         self._check(value.shape, value.dtype)
         if isinstance(key, slice):
             for d in self._data:
