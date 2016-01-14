@@ -1867,6 +1867,7 @@ class _batch(object):
     @property
     def shape(self):
         s = sum([i.shape[0] for i in self._data])
+        print(s, i)
         return (s,) + i.shape[1:]
 
     @property
