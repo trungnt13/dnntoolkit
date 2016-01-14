@@ -892,7 +892,6 @@ def _is_tags_match(func, tags, absolute=False):
         return False
     return True
 
-# TODO: Add implementation for loading the whole models
 class model(object):
 
     """docstring for Model
@@ -990,7 +989,6 @@ class model(object):
         return self._model
 
     def pred(self, *X):
-        import lasagne
         self.create_model()
 
         # ====== Create prediction function ====== #
@@ -1511,8 +1509,8 @@ class trainer(object):
 
             # main cost
             cost = self._cost_func(*self.data)
-            if np.isscalar(cost):
-                valid_cost.append(cost)
+            if len(cost.shape) == 0:
+                valid_cost.append(cost.tolist())
             else:
                 valid_cost += cost.tolist()
 
@@ -2518,8 +2516,6 @@ class visual():
         return ax
 
 class logger():
-    chars = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
-
     _last_value = 0
     _last_time = -1
     """docstring for Logger"""
@@ -2557,19 +2553,19 @@ class logger():
     @staticmethod
     def create_logger(logging_path, multiprocess=False):
         import logging
-
+        # saving path
         fh = logging.FileHandler(logging_path, mode='w')
         fh.setFormatter(logging.Formatter(
             fmt = '%(asctime)s %(levelname)s  %(message)s',
             datefmt = '%d/%m/%Y %I:%M:%S'))
         fh.setLevel(logging.DEBUG)
-
+        # print
         sh = logging.StreamHandler(sys.stderr)
         sh.setFormatter(logging.Formatter(
             fmt = '%(asctime)s %(levelname)s  %(message)s',
             datefmt = '%d/%m/%Y %I:%M:%S'))
         sh.setLevel(logging.DEBUG)
-
+        # add the current logger
         logging.getLogger().setLevel(logging.NOTSET)
         logging.getLogger().addHandler(sh)
         if multiprocess:
