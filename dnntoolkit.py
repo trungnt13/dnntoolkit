@@ -927,6 +927,9 @@ class model(object):
     def set_pred(self, pred_func):
         self._pred = pred_func
 
+    def get_model(self):
+        return self._model_func
+
     def set_model(self, model, api, **kwargs):
         ''' Save a function that create your model.
 
@@ -1491,79 +1494,35 @@ class trainer(object):
         data = [self._dataset[i].iter(batch, shuffle=shuffle, seed=seed) for i in names]
         return enumerate(zip(*data))
 
-    def _test(self, test_data, batch):
-        self.task = 'test'
+    def _cost(self, task, valid_data, batch):
+        self.task = task
 
-        ntest = self._dataset[test_data[0]].shape[0]
-        test_cost = []
-        n = 0
-        it = 0
-        for i, data in self._create_iter(test_data, batch, False):
-            n += data[0].shape[0]
-            self.data = data
-            self.iter = it
-            self._batch_start(self)
-            cost = self._cost_func(*self.data)
-
-            if hasattr(cost, '__len__'):
-                test_cost += cost.tolist()
-            else:
-                test_cost.append(cost)
-
-            if self._log_enable:
-                logger.progress(n, max_val=ntest,
-                    title='Test:Cost:%.2f' % (np.mean(cost)),
-                    newline=self._log_newline)
-
-            self.cost = cost
-            self.iter = it
-            self._batch_end(self)
-            self.data = None
-            self.cost = None
-
-        # ====== callback ====== #
-        self.cost = test_cost
-        self._test_end(self) # callback
-
-        # ====== statistic of validation ====== #
-        test_mean = np.mean(self.cost)
-        test_median = np.median(self.cost)
-        test_min = np.percentile(self.cost, 5)
-        test_max = np.percentile(self.cost, 95)
-        test_var = np.var(self.cost)
-        print('Test Statistic: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
-            (test_mean, test_var, test_median, test_min, test_max))
-
-        # ====== reset all flag ====== #
-        self.cost = None
-        self.task = None
-        self.iter = 0
-
-    def _valid(self, valid_data, batch):
-        self.task = 'valid'
-
-        nvalid = self._dataset[valid_data[0]].shape[0]
+        n_samples = self._dataset[valid_data[0]].shape[0]
         valid_cost = []
         n = 0
         it = 0
         for i, data in self._create_iter(valid_data, batch, False):
+            # batch start
             it += 1
             n += data[0].shape[0]
             self.data = data
             self.iter = it
             self._batch_start(self)
+
+            # main cost
             cost = self._cost_func(*self.data)
 
-            if hasattr(cost, '__len__'):
+            if hasattr(cost, 'shape'):
                 valid_cost += cost.tolist()
             else:
                 valid_cost.append(cost)
 
             if self._log_enable:
-                logger.progress(n, max_val=nvalid,
-                    title='Valid:Cost:%.2f' % (np.mean(cost)),
+                logger.progress(n, max_val=n_samples,
+                    title='%s:Cost:%.2f' % (task, np.mean(cost)),
                     newline=self._log_newline)
 
+            # batch end
             self.cost = cost
             self.iter = it
             self._batch_end(self)
@@ -1572,7 +1531,10 @@ class trainer(object):
 
         # ====== callback ====== #
         self.cost = valid_cost
-        self._valid_end(self) # callback
+        if task == 'valid':
+            self._valid_end(self) # callback
+        else:
+            self._test_end(self)
 
         # ====== statistic of validation ====== #
         valid_mean = np.mean(self.cost)
@@ -1580,7 +1542,7 @@ class trainer(object):
         valid_min = np.percentile(self.cost, 5)
         valid_max = np.percentile(self.cost, 95)
         valid_var = np.var(self.cost)
-        print('Validation Statistic: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+        print('Statistic: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
             (valid_mean, valid_var, valid_median, valid_min, valid_max))
 
         # ====== reset all flag ====== #
@@ -1616,11 +1578,14 @@ class trainer(object):
             n = 0
             # ====== start batches ====== #
             for j, data in self._create_iter(train_data, batch, shuffle):
+                # start batch
                 n += data[0].shape[0]
                 it += 1
                 self.data = data
                 self.iter = it
                 self._batch_start(self) # callback
+
+                # main updates
                 cost = self._updates_func(*self.data)
 
                 # log
@@ -1644,7 +1609,7 @@ class trainer(object):
                 # validation
                 if it > 0 and it % validfreq == 0:
                     if valid_data is not None:
-                        self._valid(valid_data, batch)
+                        self._cost('valid', valid_data, batch)
                         if self._early_stop(): # earlystop
                             self._finish_train(train_cost)
                             return
@@ -1705,12 +1670,12 @@ class trainer(object):
                     if valid is None:
                         print('*** WARNING: no VALID data found, ignored **')
                     else:
-                        self._valid(valid, batch)
+                        self._cost('valid', valid, batch)
                 elif 'test' in task:
                     if test is None:
                         print('*** WARNING: no TEST data found, ignored **')
                     else:
-                        self._test(test, batch)
+                        self._cost('test', test, batch)
         except Exception, e:
             print(str(e))
             import traceback; traceback.print_exc();
