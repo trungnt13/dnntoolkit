@@ -897,13 +897,13 @@ class model(object):
     """docstring for Model
     """
 
-    def __init__(self):
+    def __init__(self, savepath=None):
         super(model, self).__init__()
         self._history = []
         self._working_history = None
 
         self._weights = []
-        self._save_path = None
+        self._save_path = savepath
 
         self._model_func = None
         self._model_name = None
@@ -947,12 +947,16 @@ class model(object):
         primitive = (bool, int, float, str)
         sandbox = {}
 
+        # ====== Lasagne ====== #
         if 'lasagne' in api:
             self._api = 'lasagne'
             self._model_func = model
+            # store all primitive and api type
             for k, v in model.func_globals.items():
-                if isinstance(v, primitive):
+                is_api_type = (type(v) == type and 'lasagne' in str(v))
+                if isinstance(v, primitive) or is_api_type:
                     sandbox[k] = v
+        # ====== Keras ====== #
         elif 'keras' in api:
             self._api = 'keras'
             raise NotImplementedError()
