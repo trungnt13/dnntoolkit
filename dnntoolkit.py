@@ -154,6 +154,92 @@ class mpi():
         con_processes = multiprocessing.Process(target=con_func, args=(path, file_path))
         return div_processes, con_processes
 
+    @staticmethod
+    def preprocess_mpi(jobs_list, features_func, save_func, n_cache=30):
+        ''' Wrapped preprocessing procedure in MPI.
+                    root
+                / / / | \ \ \
+                features_func
+                \ \ \ | / / /
+                  save_func
+            * NO need call Barrier at the end of this methods
+        Parameters
+        ----------
+        jobs_list : list
+            [data_concern_job_1, job_2, ....]
+        features_func : function(job_i)
+            function object to extract feature from each job
+        save_func : function([job_i,...])
+            transfer all data to process 0 as a list for saving to disk
+        n_cache : int
+            maximum number of cache for each process before gathering the data
+
+        Example
+        -------
+            >>> jobs = range(1, 110)
+            >>> if rank == 0:
+            >>>     f = h5py.File('tmp.hdf5', 'w')
+            >>>     idx = 0
+            >>> def feature_extract(j):
+            >>>     return rank
+            >>> def save(j):
+            >>>     global idx
+            >>>     f[str(idx)] = str(j)
+            >>>     idx += 1
+            >>> dnntoolkit.mpi.preprocess_mpi(jobs, feature_extract, save, n_cache=5)
+            >>> if rank == 0:
+            >>>     f['idx'] = idx
+            >>>     f.close()
+        '''
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        npro = comm.Get_size()
+
+        #####################################
+        # 1. Scatter jobs for all process.
+        if rank == 0:
+            print('Process 0 found %d jobs' % len(jobs_list))
+            jobs = mpi.segment_job(jobs_list, npro)
+            n_loop = max([len(i) for i in jobs])
+        else:
+            jobs = None
+            n_loop = 0
+            print('Process %d waiting for Process 0!' % rank)
+        comm.Barrier()
+
+        jobs = comm.scatter(jobs, root=0)
+        n_loop = comm.bcast(n_loop, root=0)
+        print('Process %d receive %d jobs' % (rank, len(jobs)))
+
+        #####################################
+        # 2. Start preprocessing.
+        data = []
+
+        for i in xrange(n_loop):
+            if i % n_cache == 0 and i > 0:
+                all_data = comm.gather(data, root=0)
+                if rank == 0:
+                    print('Saving data at process 0')
+                    all_data = [k for j in all_data for k in j]
+                    if len(all_data) > 0:
+                        save_func(all_data)
+                data = []
+
+            if i >= len(jobs): continue
+            feature = features_func(jobs[i])
+            if feature is not None:
+                data.append(feature)
+
+            if i % 50 == 0:
+                print('Rank:%d preprocessed %d files!' % (rank, i))
+
+        all_data = comm.gather(data, root=0)
+        if rank == 0:
+            print('Saving data before exit !!!!\n')
+            all_data = [k for j in all_data for k in j]
+            if len(all_data) > 0:
+                save_func(all_data)
 
 
 # ======================================================================
@@ -409,10 +495,6 @@ class tensor():
         '''
         return T.cast(T.eq(T.arange(x.shape[1])[None, :], T.argmax(x, axis=1, keepdims=True)), theano.config.floatX)
 
-    @staticmethod
-    def on_gpu():
-        return theano.config.device[:3] == 'gpu'
-
 # ======================================================================
 # Computing hyper-parameters
 # ======================================================================
@@ -430,6 +512,10 @@ class GPU():
         'size': 24, # GB
         'core': 4992
     }
+
+    @staticmethod
+    def on_gpu():
+        return theano.config.device[:3] == 'gpu'
 
 # ======================================================================
 # Early stop
@@ -1717,7 +1803,7 @@ def _auto_batch_size(shape):
     batch /= ratio
     for i in xrange(10):
         if 2**i > batch:
-            return 2**(i-1)
+            return 2**(i - 1)
     return 128
 
 def _hdf5_get_all_dataset(hdf, fileter_func=None, path='/'):
