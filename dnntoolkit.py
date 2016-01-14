@@ -1512,7 +1512,7 @@ class trainer(object):
             # main cost
             cost = self._cost_func(*self.data)
 
-            if hasattr(cost, 'shape'):
+            if hasattr(cost, 'shape') and len(cost) > 0:
                 valid_cost += cost.tolist()
             else:
                 valid_cost.append(cost)
