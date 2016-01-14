@@ -1429,7 +1429,7 @@ class trainer(object):
             set_dataset method
         epoch : int
             number of epoch for training (NO need for valid and test)
-        batch : int
+        batch : int, 'auto'
             number of samples for each batch
         validfreq : int, float(0.-1.)
             validation frequency when training, when float, it mean percentage
