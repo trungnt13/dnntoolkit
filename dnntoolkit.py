@@ -1383,6 +1383,14 @@ class trainer(object):
         self._stop = True
 
     # ==================== Setter ==================== #
+    def set_action(self, name, action,
+                   epoch_start=False, epoch_end=False,
+                   batch_start=False, batch_end=False,
+                   train_start=False, train_end=False,
+                   valid_start=False, valid_end=False,
+                   test_start=False, test_end=False):
+        pass
+
     def set_log(self, enable=True, newline=False):
         self._log_enable = enable
         self._log_newline = newline
