@@ -906,6 +906,7 @@ class model(object):
         super(model, self).__init__()
         self._history = []
         self._working_history = None
+        self._history_updated = False
 
         self._weights = []
         self._save_path = savepath
@@ -913,7 +914,7 @@ class model(object):
         self._model_func = None
         self._model_name = None
         self._model_args = None
-        self._api = 'lasagne'
+        self._api = ''
         self._sandbox = ''
 
         # contain real model object
@@ -964,10 +965,10 @@ class model(object):
         # ====== Keras ====== #
         elif 'keras' in api:
             self._api = 'keras'
-            raise NotImplementedError()
+            warnings.warn('NOT support API!', RuntimeWarning)
         elif 'blocks' in api:
             self._api = 'blocks'
-            raise NotImplementedError()
+            warnings.warn('NOT support API!', RuntimeWarning)
         #H5py not support binary string, cannot use marshal
         self._sandbox = sandbox
         self._model_args = kwargs
@@ -994,7 +995,7 @@ class model(object):
                         print(str(e))
                         import traceback; traceback.print_exc();
             else:
-                raise NotImplementedError()
+                warnings.warn('NOT support API!', RuntimeWarning)
         return self._model
 
     def pred(self, *X):
@@ -1012,7 +1013,11 @@ class model(object):
                     allow_input_downcast=True,
                     on_unused_input=None)
             else:
-                raise NotImplementedError
+                warnings.warn('NOT support API!', RuntimeWarning)
+
+        # ====== Check ====== #
+        if self._pred is None:
+            return None
 
         # ====== make prediction ====== #
         prediction = None
@@ -1035,13 +1040,15 @@ class model(object):
 
     # ==================== History manager ==================== #
     def _check_current_working_history(self):
-        if self._working_history is None:
-            if len(self._history) == 0:
-                self._history.append(_history())
-            self._working_history = self._history[-1]
+        if len(self._history) == 0:
+            self._history.append(_history())
+        if self._history_updated or self._working_history is None:
+            self._working_history = self[:]
 
     def __getitem__(self, key):
-        self._check_current_working_history()
+        if len(self._history) == 0:
+            self._history.append(_history())
+
         if isinstance(key, slice) or isinstance(key, int):
             h = self._history[key]
             if hasattr(h, '__len__'):
@@ -1052,7 +1059,12 @@ class model(object):
             for i in self._history:
                 if key == i.name:
                     return i
-        raise ValueError('Model index must be [slice], [int] or [str]')
+        elif type(key) in (tuple, list):
+            h = [i for k in key for i in self._history if i.name == k]
+            if len(h) > 1: return h[0].merge(*h[1:])
+            else: return h[0]
+        raise ValueError('Model index must be [slice],\
+            [int] or [str], or list of string')
 
     def new_frame(self, name=None, description=None):
         self._history.append(_history(name, description))
@@ -1064,20 +1076,25 @@ class model(object):
         else:
             self._history = self._history[:-1]
         self._working_history = None
-        self._check_current_working_history()
+        self._history_updated = True
 
     def record(self, values, *tags):
-        self._check_current_working_history()
-        self._working_history.record(values, *tags)
+        ''' Always write to the newest frame '''
+        if len(self._history) == 0:
+            self._history.append(_history())
+        self._history[-1].record(values, *tags)
+        self._history_updated = True
 
     def update(self, tags, new, after=None, before=None, n=None, absolute=False):
-        self._check_current_working_history()
-        self._working_history.update(self, tags, new,
+        if len(self._history) == 0:
+            self._history.append(_history())
+        self._history[-1].update(self, tags, new,
             after, before, n, absolute)
+        self._history_updated = True
 
     def select(self, tags, default=None, after=None, before=None, n=None,
         filter_value=None, absolute=False, newest=False, return_time=False):
-        ''' Query in history
+        ''' Query in history, default working history is the newest frame.
 
         Parameters
         ----------
@@ -1112,12 +1129,11 @@ class model(object):
         self._working_history.print_history()
 
     def print_frames(self):
-        self._check_current_working_history()
+        if len(self._history) == 0:
+            self._history.append(_history())
+
         for i in self._history:
-            if i == self._working_history:
-                print('* ' + str(i))
-            else:
-                print(i)
+            print(i)
 
     def __str__(self):
         import inspect
@@ -1165,6 +1181,7 @@ class model(object):
         f = h5py.File(path, 'w')
         f['history'] = cPickle.dumps(self._history)
 
+        # ====== Save model function ====== #
         if self._model_func is not None:
             model_func = marshal.dumps(self._model_func.func_code)
             b = array("B", model_func)
@@ -1173,6 +1190,13 @@ class model(object):
             f['model_name'] = self._model_name
             f['sandbox'] = cPickle.dumps(self._sandbox)
             f['api'] = self._api
+
+        # model is not None, get weight from model
+        if self._model is not None:
+            if self._api == 'lasagne':
+                import lasagne
+                self.set_weights(
+                    lasagne.layers.get_all_param_values(self._model))
 
         if len(self._weights) > 0:
             for i, w in enumerate(self._weights):
@@ -1194,11 +1218,14 @@ class model(object):
         m._save_path = path
 
         f = h5py.File(path, 'r')
+
+        # ====== Load history ====== #
         if 'history' in f:
             m._history = cPickle.loads(f['history'].value)
         else:
             m._history = []
 
+        # ====== Load model ====== #
         if 'api' in f:
             m._api = f['api'].value
         else: m._api = None
@@ -1212,17 +1239,20 @@ class model(object):
             m._sandbox = cPickle.loads(f['sandbox'].value)
         else: m._sandbox = None
 
+        # insert sandbox to globals
         if m._api is not None and m._sandbox is not None:
             globals()[m._api] = __import__(m._api)
             for k, v in m._sandbox.iteritems():
                 globals()[k] = v
 
+        # load model_func code
         if 'model_func' in f:
             b = cPickle.loads(f['model_func'].value)
             m._model_func = marshal.loads(b.tostring())
             m._model_func = types.FunctionType(m._model_func, globals(), m._model_name)
         else: m._model_func = None
 
+        # load weighs
         if 'nb_weights' in f:
             for i in xrange(f['nb_weights'].value):
                 m._weights.append(f['weight_%d' % i].value)
