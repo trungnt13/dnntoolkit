@@ -546,22 +546,35 @@ def _check_gs(validation):
 def _check_gl(validation, threshold=5):
     ''' Generalization loss:
     validation is list of cost values (assumpt: lower is better)
+    Note
+    ----
+    This strategy prefer to keep the model remain when the cost unchange
     '''
     gl_exit_threshold = threshold
+    epsilon = 1e-5
 
     if len(validation) == 0:
         return 0, 0
     shouldStop = 0
     shouldSave = 0
 
-    gl_t = 100 * (validation[-1] / min(validation) - 1)
-    if gl_t == 0: # min = current_value
+    gl_t = 100 * (validation[-1] / (min(validation) + epsilon) - 1)
+    if gl_t <= 0 and np.argmin(validation) == (len(validation) - 1):
         shouldSave = 1
         shouldStop = -1
     elif gl_t > gl_exit_threshold:
         shouldStop = 1
         shouldSave = -1
 
+    # check stay the same performance for so long
+    if len(validation) > threshold:
+        remain_detected = 0
+        j = validation[-int(threshold)]
+        for i in validation[-int(threshold):]:
+            if abs(i - j) < epsilon:
+                remain_detected += 1
+        if remain_detected >= threshold:
+            shouldStop = 1
     return shouldSave, shouldStop
 
 
