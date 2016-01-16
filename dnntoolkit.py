@@ -1037,7 +1037,7 @@ class model(object):
         ''' Roll-back weights and history of model from last checkpoints
         (last saved path).
         '''
-        if self._save_path is not None:
+        if self._save_path is not None and os.path.exists(self._save_path):
             f = h5py.File(self._save_path, 'r')
 
             # rollback weights
