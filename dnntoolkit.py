@@ -1197,7 +1197,7 @@ class model(object):
         # weight
         s += '======== Weights ========\n'
         for w in self._weights:
-            s += ' - shape:%s' % w.shape + '\n'
+            s += ' - shape:%s' % str(w.shape) + '\n'
 
         # model function
         s += '======== Code ========\n'
