@@ -199,18 +199,18 @@ class mpi():
         #####################################
         # 1. Scatter jobs for all process.
         if rank == 0:
-            print('Process 0 found %d jobs' % len(jobs_list))
+            logger.info('Process 0 found %d jobs' % len(jobs_list))
             jobs = mpi.segment_job(jobs_list, npro)
             n_loop = max([len(i) for i in jobs])
         else:
             jobs = None
             n_loop = 0
-            print('Process %d waiting for Process 0!' % rank)
+            logger.info('Process %d waiting for Process 0!' % rank)
         comm.Barrier()
 
         jobs = comm.scatter(jobs, root=0)
         n_loop = comm.bcast(n_loop, root=0)
-        print('Process %d receive %d jobs' % (rank, len(jobs)))
+        logger.info('Process %d receive %d jobs' % (rank, len(jobs)))
 
         #####################################
         # 2. Start preprocessing.
@@ -220,7 +220,7 @@ class mpi():
             if i % n_cache == 0 and i > 0:
                 all_data = comm.gather(data, root=0)
                 if rank == 0:
-                    print('Saving data at process 0')
+                    logger.info('Saving data at process 0')
                     all_data = [k for j in all_data for k in j]
                     if len(all_data) > 0:
                         save_func(all_data)
@@ -232,11 +232,11 @@ class mpi():
                 data.append(feature)
 
             if i % 50 == 0:
-                print('Rank:%d preprocessed %d files!' % (rank, i))
+                logger.info('Rank:%d preprocessed %d files!' % (rank, i))
 
         all_data = comm.gather(data, root=0)
         if rank == 0:
-            print('Saving data before exit !!!!\n')
+            logger.info('Saving data before exit !!!!\n')
             all_data = [k for j in all_data for k in j]
             if len(all_data) > 0:
                 save_func(all_data)
@@ -520,7 +520,7 @@ class GPU():
     @staticmethod
     def check_cudnn():
         from theano.sandbox.cuda.dnn import dnn_available as d
-        print(d() or d.msg)
+        logger.debug(d() or d.msg)
 
 # ======================================================================
 # Early stop
@@ -849,13 +849,13 @@ class _history(object):
         fmt = '|%13s | %40s | %20s|'
         sep = ('-' * 13, '-' * 40, '-' * 20)
         # header
-        print(fmt % sep)
-        print(fmt % ('Time', 'Tags', 'Values'))
-        print(fmt % sep)
+        logger.log(fmt % sep)
+        logger.log(fmt % ('Time', 'Tags', 'Values'))
+        logger.log(fmt % sep)
         # contents
         for row in self._history:
             row = tuple([str(i) for i in row])
-            print(fmt % row)
+            logger.log(fmt % row)
 
     def __str__(self):
         from collections import defaultdict
@@ -980,7 +980,7 @@ class model(object):
         if self._model is None:
             func = self._model_func
             args = self._model_args
-            print('*** INFO: creating network ... ***')
+            logger.critical('*** creating network ... ***')
             self._model = func(**args)
 
             if self._api == 'lasagne':
@@ -989,10 +989,10 @@ class model(object):
                 if len(self._weights) > 0:
                     try:
                         lasagne.layers.set_all_param_values(self._model, self._weights)
-                        print('*** INFO: successfully load old weights ***')
+                        logger.critical('*** Successfully load old weights ***')
                     except Exception, e:
-                        print('*** WARNING: Cannot load old weights ***')
-                        print(str(e))
+                        logger.critical('*** Cannot load old weights ***')
+                        logger.error(str(e))
                         import traceback; traceback.print_exc();
             else:
                 warnings.warn('NOT support API!', RuntimeWarning)
@@ -1024,12 +1024,12 @@ class model(object):
         try:
             prediction = self._pred(*X)
         except Exception, e:
-            print('*** ERROR: Cannot make prediction ***')
+            logger.error('*** Cannot make prediction ***')
             if self._api == 'lasagne':
                 import lasagne
                 input_layers = lasagne.layers.find_layers(self._model, types=lasagne.layers.InputLayer)
-                print('Input order:' + str([l.name for l in input_layers]))
-            print(str(e))
+                logger.debug('Input order:' + str([l.name for l in input_layers]))
+            logger.error(str(e))
             import traceback; traceback.print_exc();
         return prediction
 
@@ -1065,7 +1065,7 @@ class model(object):
     def print_model(self):
         import inspect
         if self._model_func is not None:
-            print(inspect.getsource(self._model_func))
+            logger.log(inspect.getsource(self._model_func))
 
     # ==================== History manager ==================== #
     def _check_current_working_history(self):
@@ -1162,7 +1162,7 @@ class model(object):
             self._history.append(_history())
 
         for i in self._history:
-            print(i)
+            logger.log(i)
 
     def __str__(self):
         import inspect
@@ -1628,7 +1628,7 @@ class trainer(object):
         valid_min = np.percentile(self.cost, 5)
         valid_max = np.percentile(self.cost, 95)
         valid_var = np.var(self.cost)
-        print('Statistic: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+        logger.log('Statistic: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
             (valid_mean, valid_var, valid_median, valid_min, valid_max))
 
         # ====== reset all flag ====== #
@@ -1738,34 +1738,34 @@ class trainer(object):
 
                 self.idx += 1
                 if self._log_enable:
-                    print('\n******* %d-th run, with configuration: *******' % self.idx)
-                    print(' - Task:%s' % task)
-                    print(' - Train data:%s' % str(train))
-                    print(' - Valid data:%s' % str(valid))
-                    print(' - Test data:%s' % str(test))
-                    print(' - Epoch:%d' % epoch)
-                    print(' - Batch:%d' % batch)
-                    print(' - Validfreq:%d' % validfreq)
-                    print(' - Shuffle:%s' % str(shuffle))
-                    print('**********************************************')
+                    logger.log('\n******* %d-th run, with configuration: *******' % self.idx)
+                    logger.log(' - Task:%s' % task)
+                    logger.log(' - Train data:%s' % str(train))
+                    logger.log(' - Valid data:%s' % str(valid))
+                    logger.log(' - Test data:%s' % str(test))
+                    logger.log(' - Epoch:%d' % epoch)
+                    logger.log(' - Batch:%d' % batch)
+                    logger.log(' - Validfreq:%d' % validfreq)
+                    logger.log(' - Shuffle:%s' % str(shuffle))
+                    logger.log('**********************************************')
 
                 if 'train' in task:
                     if train is None:
-                        print('*** WARNING: no TRAIN data found, ignored **')
+                        logger.warning('*** no TRAIN data found, ignored **')
                     else:
                         self._train(train, valid, epoch, batch, validfreq, shuffle)
                 elif 'valid' in task:
                     if valid is None:
-                        print('*** WARNING: no VALID data found, ignored **')
+                        logger.warning('*** no VALID data found, ignored **')
                     else:
                         self._cost('valid', valid, batch)
                 elif 'test' in task:
                     if test is None:
-                        print('*** WARNING: no TEST data found, ignored **')
+                        logger.warning('*** no TEST data found, ignored **')
                     else:
                         self._cost('test', test, batch)
         except Exception, e:
-            print(str(e))
+            logger.error(str(e))
             import traceback; traceback.print_exc();
             return False
         return True
@@ -2415,9 +2415,8 @@ class dataset(object):
         else: # array
             # find appropriate key
             hdf = self._get_write_hdf()
-            print(hdf)
-            for k in key:
-                for h in hdf:
+            for k in key: # each key
+                for h in hdf: # do the same for all writable hdf
                     if k in h:
                         h[k][:] = value
                     else:
@@ -2469,7 +2468,7 @@ class dataset(object):
             local path or url to hdf5 datafile
         '''
         datapath = net.get_file('mnist.hdf', path)
-        print('Loading data from: %s' % datapath)
+        logger.info('Loading data from: %s' % datapath)
         return dataset(datapath, mode='r')
 
     def load_imdb(path):
@@ -2640,9 +2639,94 @@ class visual():
 class logger():
     _last_value = 0
     _last_time = -1
+    _default_logger = None
+    _is_enable = True
     """docstring for Logger"""
+
+    @staticmethod
+    def set_enable(is_enable):
+        logger._is_enable = is_enable
+        if is_enable:
+            logger._default_logger.setLevel(10) # debug level
+        else:
+            logger._default_logger.setLevel(88) # you shall not pass!
+
+    @staticmethod
+    def _check_init_logger():
+        if logger._default_logger is None:
+            logger.create_logger(logging_path=None)
+
+    @staticmethod
+    def set_save_path(logging_path, mode='w', multiprocess=False):
+        '''All old path will be ignored'''
+        import logging
+        logger._check_init_logger()
+        log = logger._default_logger
+        log.handlers = [log.handlers[0]]
+
+        if type(logging_path) not in (tuple, list):
+            logging_path = [logging_path]
+
+        for path in logging_path:
+            if path is not None:
+                # saving path
+                fh = logging.FileHandler(path, mode=mode)
+                fh.setFormatter(logging.Formatter(
+                    fmt = '%(asctime)s %(levelname)s  %(message)s',
+                    datefmt = '%d/%m/%Y %I:%M:%S'))
+                fh.setLevel(logging.DEBUG)
+                if multiprocess:
+                    import multiprocessing_logging
+                    log.addHandler(
+                        multiprocessing_logging.MultiProcessingHandler('mpi', fh))
+                else:
+                    log.addHandler(fh)
+
+    @staticmethod
+    def warning(*anything):
+        logger._check_init_logger()
+        logger._default_logger.warning(*anything)
+
+    @staticmethod
+    def error(*anything):
+        logger._check_init_logger()
+        logger._default_logger.error(*anything)
+
+    @staticmethod
+    def critical(*anything):
+        logger._check_init_logger()
+        logger._default_logger.critical(*anything)
+
+    @staticmethod
+    def debug(*anything):
+        logger._check_init_logger()
+        logger._default_logger.debug(*anything)
+
+    @staticmethod
+    def info(*anything):
+        logger._check_init_logger()
+        logger._default_logger.info(*anything)
+
+    @staticmethod
+    def log(*anything):
+        import logging
+        logger._check_init_logger()
+        # format with only messages
+        for h in logger._default_logger.handlers:
+            h.setFormatter(logging.Formatter(fmt = '%(message)s'))
+
+        logger._default_logger.critical(*anything)
+
+        # format with time and level
+        for h in logger._default_logger.handlers:
+            h.setFormatter(logging.Formatter(
+                fmt = '%(asctime)s %(levelname)s  %(message)s',
+                datefmt = '%d/%m/%Y %I:%M:%S'))
+
     @staticmethod
     def progress(p, max_val=1.0, title='Progress', bar='=', newline=False):
+        if not logger._is_enable:
+            return
         # ====== Config ====== #
         if p < 0: p = 0.0
         if p > max_val: p = max_val
@@ -2673,29 +2757,71 @@ class logger():
             sys.stdout.write("\n")
 
     @staticmethod
-    def create_logger(logging_path, multiprocess=False):
+    def create_logger(name=None, logging_path=None, mode='w', multiprocess=False):
+        ''' VERBOSITY level:
+            CRITICAL: 50
+            ERROR   : 40
+            WARNING : 30
+            INFO    : 20
+            DEBUG   : 10
+            UNSET   : 0
+
+        Parameters
+        ----------
+
+        Example
+        -------
+        >>> logger.debug('This is a debug message')
+        >>> logger.info('This is an info message')
+        >>> logger.warning('This is a warning message')
+        >>> logger.error('This is an error message')
+        >>> logger.critical('This is a critical error message')
+
+        Note
+        ----
+        if name is None or default, the created logger will be used as default
+        logger for dnntoolkit
+        '''
         import logging
-        # saving path
-        fh = logging.FileHandler(logging_path, mode='w')
-        fh.setFormatter(logging.Formatter(
-            fmt = '%(asctime)s %(levelname)s  %(message)s',
-            datefmt = '%d/%m/%Y %I:%M:%S'))
-        fh.setLevel(logging.DEBUG)
+        if name is None:
+            name = 'default'
+        log = logging.getLogger('dnntoolkit.%s' % name)
+        # remove all old handler
+        log.handlers = []
         # print
         sh = logging.StreamHandler(sys.stderr)
         sh.setFormatter(logging.Formatter(
-            fmt = '%(asctime)s %(levelname)s  %(message)s',
+            fmt = '%(asctime)s %(levelname)s:  %(message)s',
             datefmt = '%d/%m/%Y %I:%M:%S'))
         sh.setLevel(logging.DEBUG)
+
         # add the current logger
-        logging.getLogger().setLevel(logging.NOTSET)
-        logging.getLogger().addHandler(sh)
-        if multiprocess:
-            import multiprocessing_logging
-            logging.getLogger().addHandler(multiprocessing_logging.MultiProcessingHandler('mpi', fh))
-        else:
-            logging.getLogger().addHandler(fh)
-        return logging.getLogger()
+        log.setLevel(logging.DEBUG)
+        log.addHandler(sh)
+
+        if type(logging_path) not in (tuple, list):
+            logging_path = [logging_path]
+
+        for path in logging_path:
+            if path is not None:
+                # saving path
+                fh = logging.FileHandler(path, mode=mode)
+                fh.setFormatter(logging.Formatter(
+                    fmt = '%(asctime)s %(levelname)s  %(message)s',
+                    datefmt = '%d/%m/%Y %I:%M:%S'))
+                fh.setLevel(logging.DEBUG)
+                if multiprocess:
+                    import multiprocessing_logging
+                    log.addHandler(
+                        multiprocessing_logging.MultiProcessingHandler('mpi', fh))
+                else:
+                    log.addHandler(fh)
+
+        # enable or disable
+        if name == 'default':
+            logger._default_logger = log
+            logger.set_enable(logger._is_enable)
+        return log
 
 # ======================================================================
 # Feature
@@ -3176,7 +3302,7 @@ class net():
         fpath = os.path.join(datadir, fname)
 
         if not os.path.exists(fpath):
-            print('Downloading data from', origin)
+            logger.info('Downloading data from', origin)
             global progbar
             progbar = None
 
