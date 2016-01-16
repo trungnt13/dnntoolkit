@@ -1051,6 +1051,7 @@ class model(object):
         (last saved path).
         '''
         if self._save_path is not None and os.path.exists(self._save_path):
+            import cPickle
             f = h5py.File(self._save_path, 'r')
 
             # rollback weights
