@@ -81,8 +81,10 @@ def igpu(t=30, n=1, mem=15000):
         arch = 'gputest'
 
     N = int(math.ceil(n / 2))
+    if n > 1:
+        n = 2
 
-    os.system('srun -N %d -p %s -t %d --gres=gpu:2 --mem=%d --pty $SHELL -l' % (N, arch, t, mem))
+    os.system('srun -N %d -p %s -t %d --gres=gpu:%d --mem=%d --pty $SHELL -l' % (N, arch, t, n, mem))
 
 def icpu(t=30, n=8, mem=16000):
     N = int(math.ceil(n / 16))
