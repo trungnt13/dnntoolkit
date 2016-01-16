@@ -248,7 +248,7 @@ class mpi():
 class io():
 
     @staticmethod
-    def extract_files(path, filter_func=None):
+    def all_files(path, filter_func=None):
         ''' Recurrsively get all files in the given path '''
         file_list = []
         q = queue()
@@ -516,6 +516,11 @@ class GPU():
     @staticmethod
     def on_gpu():
         return theano.config.device[:3] == 'gpu'
+
+    @staticmethod
+    def check_cudnn():
+        from theano.sandbox.cuda.dnn import dnn_available as d
+        print(d() or d.msg)
 
 # ======================================================================
 # Early stop
@@ -1801,10 +1806,7 @@ def _auto_batch_size(shape):
     batch = 256
     ratio = np.prod(shape[1:]) / (224 * 224 * 3)
     batch /= ratio
-    for i in xrange(10):
-        if 2**i > batch:
-            return 2**(i - 1)
-    return 128
+    return 2**int(np.log2(batch))
 
 def _hdf5_get_all_dataset(hdf, fileter_func=None, path='/'):
     res = []
@@ -2429,8 +2431,24 @@ class visual():
         return axis
 
     @staticmethod
-    def spectrogram(s, ax=None):
+    def plot_spectrogram(s, fs=8000, ax=None, colormap = "jet"):
+        '''
+        Example
+        -------
+        >>> fig = plt.figure()
+        >>> ax = fig.add_subplot(2, 1, 1)
+        >>> ax.specgram(s, Fs=8000, NFFT=256)
+        >>> ax = fig.add_subplot(2, 1, 2)
+        >>> dnntoolkit.visual.plot_spectrogram(t, ax)
+        >>> plt.show()
+
+        '''
         from matplotlib import pyplot as plt
+        if colormap is None:
+            colormap = plt.cm.Blues
+
+        s = speech.spectrogram(s, fs, normalize=False, vad=False)
+        s = 20. * np.log10(np.abs(s) / 10e-6) # amplitude to decibel
 
         if s.shape[0] == 1 or s.shape[1] == 1:
             pass
@@ -2438,9 +2456,11 @@ class visual():
         ax = ax if ax is not None else plt.gca()
         if s.shape[0] > s.shape[1]:
             s = s.T
-        img = ax.imshow(s, cmap=plt.cm.Blues, interpolation='bilinear',
+        img = ax.imshow(s, cmap=colormap, interpolation='bilinear',
             origin="lower", aspect="auto")
         plt.colorbar(img, ax=ax)
+        plt.xlabel("time (#)")
+        plt.ylabel("frequency (hz)")
         return ax
 
     @staticmethod
@@ -2717,7 +2737,7 @@ class speech():
                         nwin=win, shift=shift,
                         get_spec=False, get_mspec=True)
         logenergy = logmel[1]
-        logmel = logmel[3]
+        logmel = logmel[3].astype(np.float32)
 
         #####################################
         # 4. delta.
@@ -2744,7 +2764,6 @@ class speech():
 
         # Normalize
         if normalize:
-            logmel = logmel.astype(np.float32)
             mean = np.mean(logmel, axis = 0)
             var = np.var(logmel, axis = 0)
             logmel = (logmel - mean) / np.sqrt(var)
@@ -2781,7 +2800,7 @@ class speech():
                         nwin=win, shift=shift,
                         get_spec=False, get_mspec=False)
         logenergy = mfcc[1]
-        mfcc = mfcc[0]
+        mfcc = mfcc[0].astype(np.float32)
 
         if energy:
             mfcc = np.concatenate((mfcc, logenergy.reshape(-1, 1)), axis=1)
@@ -2807,7 +2826,6 @@ class speech():
 
         # Normalize
         if normalize:
-            mfcc = mfcc.astype(np.float32)
             mean = np.mean(mfcc, axis = 0)
             var = np.var(mfcc, axis = 0)
             mfcc = (mfcc - mean) / np.sqrt(var)
@@ -2815,6 +2833,56 @@ class speech():
         if returnVAD and vad:
             return mfcc, idx
         return mfcc
+
+    @staticmethod
+    def spectrogram(signal, fs, n_ceps=13, n_filters=40,
+            win=0.025, shift=0.01,
+            normalize=False, clean=True,
+            vad=True, returnVAD=False):
+        import sidekit
+
+        #####################################
+        # 1. Const.
+        f_min = 0. # The minimal frequency of the filter bank
+        f_max = fs / 2
+
+        #####################################
+        # 2. Speech.
+        if clean:
+            signal = speech.preprocess(signal)
+
+        #####################################
+        # 3. mfcc.
+        # MFCC
+        spt = sidekit.frontend.features.mfcc(signal,
+                        lowfreq=f_min, maxfreq=f_max,
+                        nlinfilt=0, nlogfilt=n_filters,
+                        fs=fs, nceps=n_ceps, midfreq=1000,
+                        nwin=win, shift=shift,
+                        get_spec=True, get_mspec=False)
+        spt = spt[2]
+        spt = spt.astype(np.float32)
+        # spt = np.clip(spt, np.percentile(spt, 0.01),
+                      # np.percentile(spt, 0.99))
+
+        #####################################
+        # 5. Vad and normalize.
+        # VAD
+        if vad:
+            nwin = int(fs * win)
+            idx = sidekit.frontend.vad.vad_snr(signal, 30, fs=fs, shift=shift, nwin=nwin)
+            if not returnVAD:
+                spt = spt[idx, :]
+
+        # Normalize
+        if normalize:
+            mean = np.mean(spt, axis = 0)
+            var = np.var(spt, axis = 0)
+            spt = (spt - mean) / np.sqrt(var)
+
+        if returnVAD and vad:
+            return spt, idx
+        return spt
 
     @staticmethod
     def LevenshteinDistance(s1, s2):
