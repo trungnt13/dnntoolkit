@@ -1024,7 +1024,7 @@ class model(object):
         try:
             prediction = self._pred(*X)
         except Exception, e:
-            logger.error('*** Cannot make prediction ***')
+            logger.critical('*** Cannot make prediction ***')
             if self._api == 'lasagne':
                 import lasagne
                 input_layers = lasagne.layers.find_layers(self._model, types=lasagne.layers.InputLayer)
@@ -2657,6 +2657,19 @@ class logger():
             logger.create_logger(logging_path=None)
 
     @staticmethod
+    def set_print_level(level):
+        ''' VERBOSITY level:
+         - CRITICAL: 50
+         - ERROR   : 40
+         - WARNING : 30
+         - INFO    : 20
+         - DEBUG   : 10
+         - UNSET   : 0
+        '''
+        logger._check_init_logger()
+        logger._default_logger.handlers[0].setLevel(level)
+
+    @staticmethod
     def set_save_path(logging_path, mode='w', multiprocess=False):
         '''All old path will be ignored'''
         import logging
@@ -2709,13 +2722,14 @@ class logger():
 
     @staticmethod
     def log(*anything):
+        '''This log is at INFO level'''
         import logging
         logger._check_init_logger()
         # format with only messages
         for h in logger._default_logger.handlers:
             h.setFormatter(logging.Formatter(fmt = '%(message)s'))
 
-        logger._default_logger.critical(*anything)
+        logger._default_logger.info(*anything)
 
         # format with time and level
         for h in logger._default_logger.handlers:
@@ -2758,13 +2772,7 @@ class logger():
 
     @staticmethod
     def create_logger(name=None, logging_path=None, mode='w', multiprocess=False):
-        ''' VERBOSITY level:
-            CRITICAL: 50
-            ERROR   : 40
-            WARNING : 30
-            INFO    : 20
-            DEBUG   : 10
-            UNSET   : 0
+        ''' All logger are created at DEBUG level
 
         Parameters
         ----------
