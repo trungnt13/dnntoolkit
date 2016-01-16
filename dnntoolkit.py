@@ -1637,13 +1637,9 @@ class trainer(object):
             self._test_end(self)
 
         # ====== statistic of validation ====== #
-        valid_mean = np.mean(self.cost)
-        valid_median = np.median(self.cost)
-        valid_min = np.percentile(self.cost, 5)
-        valid_max = np.percentile(self.cost, 95)
-        valid_var = np.var(self.cost)
-        logger.log('Statistic: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
-            (valid_mean, valid_var, valid_median, valid_min, valid_max))
+        logger.log('Valid Stats: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+                (np.mean(self.cost), np.var(self.cost), np.median(self.cost),
+                np.percentile(self.cost, 5), np.percentile(self.cost, 95)))
 
         # ====== reset all flag ====== #
         self.cost = None
@@ -1717,9 +1713,13 @@ class trainer(object):
                             return
                     self.task = 'train' # restart flag back to train
 
-            # end epoch
+            # ====== end epoch: statistic of epoch cost ====== #
             self.cost = epoch_cost
             self.iter = it
+            logger.log('Train Stats: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+                    (np.mean(self.cost), np.var(self.cost), np.median(self.cost),
+                    np.percentile(self.cost, 5), np.percentile(self.cost, 95)))
+
             self._epoch_end(self) # callback
             self.cost = None
             if self._early_stop(): # earlystop
