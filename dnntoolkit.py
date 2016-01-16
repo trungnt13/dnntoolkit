@@ -1033,6 +1033,35 @@ class model(object):
             import traceback; traceback.print_exc();
         return prediction
 
+    def rollback(self):
+        ''' Roll-back weights and history of model from last checkpoints
+        (last saved path).
+        '''
+        if self._save_path is not None:
+            f = h5py.File(self._save_path, 'r')
+
+            # rollback weights
+            self._weights = []
+            if 'nb_weights' in f:
+                for i in xrange(f['nb_weights'].value):
+                    self._weights.append(f['weight_%d' % i].value)
+            if self._model is not None:
+                if self._api == 'lasagne':
+                    import lasagne
+                    lasagne.layers.set_all_param_values(
+                        self._model, self._weights)
+                else:
+                    warnings.warn('NOT support API-%s!' % self._api, RuntimeWarning)
+
+            # rollback history
+            if 'history' in f:
+                self._history = cPickle.loads(f['history'].value)
+            else:
+                self._history = []
+            self._history_updated = True
+
+        return self
+
     def print_model(self):
         import inspect
         if self._model_func is not None:
@@ -1331,12 +1360,16 @@ class trainer(object):
         self.epoch = 0
         self.task = None
 
+        # callback
         self._epoch_start = _callback
         self._epoch_end = _callback
         self._batch_start = _callback
         self._batch_end = _callback
+        self._train_start = _callback
         self._train_end = _callback
+        self._valid_start = _callback
         self._valid_end = _callback
+        self._test_start = _callback
         self._test_end = _callback
 
         self._stop = False
@@ -1429,9 +1462,9 @@ class trainer(object):
 
     def set_callback(self, epoch_start=_callback, epoch_end=_callback,
                      batch_start=_callback, batch_end=_callback,
-                     train_end=_callback,
-                     valid_end=_callback,
-                     test_end=_callback):
+                     train_start=_callback, train_end=_callback,
+                     valid_start=_callback, valid_end=_callback,
+                     test_start=_callback, test_end=_callback):
         ''' Set Callback while training, validating or testing the model.
 
         Parameters
@@ -1447,6 +1480,10 @@ class trainer(object):
         self._epoch_end = epoch_end
         self._batch_start = batch_start
         self._batch_end = batch_end
+
+        self._train_start = train_start
+        self._valid_start = valid_start
+        self._test_start = test_start
 
         self._train_end = train_end
         self._valid_end = valid_end
@@ -1533,6 +1570,11 @@ class trainer(object):
 
     def _cost(self, task, valid_data, batch):
         self.task = task
+        self.iter = 0
+        if task == 'valid':
+            self._valid_start(self)
+        elif task == 'test':
+            self._test_start(self)
 
         n_samples = self._dataset[valid_data[0]].shape[0]
         valid_cost = []
@@ -1595,13 +1637,15 @@ class trainer(object):
 
     def _train(self, train_data, valid_data, epoch, batch, validfreq, shuffle):
         self.task = 'train'
-
         self.iter = 0
+        self._train_start(self)
+
         it = 0
         ntrain = self._dataset[train_data[0]].shape[0]
         if validfreq < 1.0: # validate validfreq
             validfreq = int(max(validfreq * ntrain / batch, 1))
         train_cost = []
+
         # ====== start ====== #
         for i in xrange(epoch):
             self.epoch = i
@@ -1735,8 +1779,11 @@ class trainer(object):
         s += 'Epoch end:' + str(self._epoch_end) + '\n'
         s += 'Batch start:' + str(self._batch_start) + '\n'
         s += 'Batch end:' + str(self._batch_end) + '\n'
+        s += 'Train start:' + str(self._train_start) + '\n'
         s += 'Train end:' + str(self._train_end) + '\n'
+        s += 'Valid start:' + str(self._valid_start) + '\n'
         s += 'Valid end:' + str(self._valid_end) + '\n'
+        s += 'Test start:' + str(self._test_start) + '\n'
         s += 'Test end:' + str(self._test_end) + '\n'
 
         for i, st in enumerate(self._strategy):
@@ -1745,7 +1792,7 @@ class trainer(object):
             if test is None: test = self._test_data
             if valid is None: valid = self._valid_data
 
-            s += '====== Strategy %d-th ======\n' % (i + 1)
+            s += '====== Strategy %d-th ======\n' % i
             s += ' - Task:%s' % st['task'] + '\n'
             s += ' - Train:%s' % str(train) + '\n'
             s += ' - Valid:%s' % str(valid) + '\n'
