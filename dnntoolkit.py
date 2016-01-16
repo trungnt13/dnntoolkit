@@ -1064,12 +1064,14 @@ class model(object):
                     import lasagne
                     lasagne.layers.set_all_param_values(
                         self._model, self._weights)
+                    logger.critical(' *** Weights rolled-back! ***')
                 else:
                     warnings.warn('NOT support API-%s!' % self._api, RuntimeWarning)
 
             # rollback history
             if 'history' in f:
                 self._history = cPickle.loads(f['history'].value)
+                logger.critical(' *** History rolled-back! ***')
             else:
                 self._history = []
             self._history_updated = True
