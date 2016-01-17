@@ -2744,6 +2744,7 @@ class visual():
         else:
             logger.log(rval)
 
+    @staticmethod
     def print_bar(x, height=20.0, bincount=None, binwidth=None, pch="o",
                   title="", xlab=None, showSummary=False, regular=False):
         '''
@@ -2781,6 +2782,7 @@ class visual():
         except:
             logger.warning('No bashplotlib available! Ignored!')
 
+    @staticmethod
     def print_scatter(x, y, size=None, pch="o", title=""):
         '''
         Parameters
@@ -2808,6 +2810,7 @@ class visual():
         except:
             logger.warning('No bashplotlib available! Ignored!')
 
+    @staticmethod
     def print_hist(x, height=20.0, bincount=None, binwidth=None, pch="o",
                   title="", xlab=None, showSummary=False, regular=False):
         '''
