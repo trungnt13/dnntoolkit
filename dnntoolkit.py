@@ -2552,16 +2552,136 @@ class visual():
 
         if s.shape[0] == 1 or s.shape[1] == 1:
             pass
-
-        ax = ax if ax is not None else plt.gca()
         if s.shape[0] > s.shape[1]:
             s = s.T
+
+        ax = ax if ax is not None else plt.gca()
         img = ax.imshow(s, cmap=colormap, interpolation='bilinear',
             origin="lower", aspect="auto")
         plt.colorbar(img, ax=ax)
         plt.xlabel("time (#)")
         plt.ylabel("frequency (hz)")
         return ax
+
+    @staticmethod
+    def plot_weights(x, ax=None, colormap = "Greys", colorbar=False, path=None):
+        '''
+        Parameters
+        ----------
+        x : numpy.ndarray
+            2D array
+        ax : matplotlib.Axis
+            create by fig.add_subplot, or plt.subplots
+        colormap : str
+            colormap alias from plt.cm.Greys = 'Greys'
+        colorbar : bool, 'all'
+            whether adding colorbar to plot, if colorbar='all', call this
+            methods after you add all subplots will create big colorbar
+            for all your plots
+        path : str
+            if path is specified, save png image to given path
+
+        Example
+        -------
+        >>> x = np.random.rand(2000, 1000)
+        >>> fig = plt.figure()
+        >>> ax = fig.add_subplot(2, 2, 1)
+        >>> dnntoolkit.visual.plot_weights(x, ax)
+        >>> ax = fig.add_subplot(2, 2, 2)
+        >>> dnntoolkit.visual.plot_weights(x, ax)
+        >>> ax = fig.add_subplot(2, 2, 3)
+        >>> dnntoolkit.visual.plot_weights(x, ax)
+        >>> ax = fig.add_subplot(2, 2, 4)
+        >>> dnntoolkit.visual.plot_weights(x, ax, path='/Users/trungnt13/tmp/shit.png')
+        >>> plt.show()
+        '''
+        from matplotlib import pyplot as plt
+        if colormap is None:
+            colormap = plt.cm.Greys
+
+        if x.ndim > 2:
+            raise ValueError('No support for > 2D')
+
+        ax = ax if ax is not None else plt.gca()
+        ax.set_aspect('equal', 'box')
+        # ax.tick_params(axis='both', which='major', labelsize=6)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.axis('off')
+        img = ax.pcolorfast(x, cmap=colormap, alpha=0.8)
+        plt.grid(True)
+
+        if colorbar == 'all':
+            fig = ax.get_figure()
+            axes = fig.get_axes()
+            fig.colorbar(img, ax=axes)
+        elif colorbar:
+            plt.colorbar(img, ax=ax)
+
+        if path:
+            plt.savefig(path, dpi=300, format='png', bbox_inches='tight')
+        return ax
+
+    @staticmethod
+    def plot_conv_weights(x, colormap = "Greys", path=None):
+        '''
+        Example
+        -------
+        >>> # 3D shape
+        >>> x = np.random.rand(32, 28, 28)
+        >>> dnntoolkit.visual.plot_conv_weights(x)
+        >>> # 4D shape
+        >>> x = np.random.rand(32, 3, 28, 28)
+        >>> dnntoolkit.visual.plot_conv_weights(x)
+        '''
+        from matplotlib import pyplot as plt
+        if colormap is None:
+            colormap = plt.cm.Greys
+
+        shape = x.shape
+        if len(shape) == 3:
+            ncols = int(np.ceil(np.sqrt(shape[0])))
+            nrows = int(ncols)
+        elif len(shape) == 4:
+            ncols = shape[0]
+            nrows = shape[1]
+        else:
+            raise ValueError('Unsupport for %d dimension' % x.ndim)
+
+        fig = plt.figure()
+        count = 0
+        for i in xrange(nrows):
+            for j in xrange(ncols):
+                count += 1
+                # skip
+                if x.ndim == 3 and count > shape[0]:
+                    continue
+
+                ax = fig.add_subplot(nrows, ncols, count)
+                ax.set_aspect('equal', 'box')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                if i == 0 and j == 0:
+                    ax.set_xlabel('New channels', fontsize=6)
+                    ax.xaxis.set_label_position('top')
+                    ax.set_ylabel('Old channels', fontsize=6)
+                    ax.yaxis.set_label_position('left')
+                else:
+                    ax.axis('off')
+                # image data
+                if x.ndim == 4:
+                    img = ax.pcolorfast(x[j, i], cmap=colormap, alpha=0.8)
+                else:
+                    img = ax.pcolorfast(x[count - 1], cmap=colormap, alpha=0.8)
+                plt.grid(True)
+
+        # colorbar
+        axes = fig.get_axes()
+        fig.colorbar(img, ax=axes)
+
+        if path:
+            plt.savefig(path, dpi=300, format='png', bbox_inches='tight')
+        return fig
 
     @staticmethod
     def bar_str(arr, max_arr=None):
