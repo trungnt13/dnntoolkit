@@ -1188,10 +1188,8 @@ class model(object):
 
     def __str__(self):
         import inspect
-
         s = ''
         s += 'Model: %s' % self._save_path + '\n'
-
         # weight
         s += '======== Weights ========\n'
         nb_params = 0
@@ -1200,7 +1198,6 @@ class model(object):
             nb_params += np.prod(w.shape)
         s += ' => Total: %d (parameters)' % nb_params
         s += ' => Size: %d MB' % (nb_params * 4 / 1024 / 1024)
-
         # history
         self._check_current_working_history()
         for i in self._history:
@@ -1208,7 +1205,6 @@ class model(object):
                 s += '* ' + str(i) + '\n'
             else:
                 s += i + '\n'
-
         # model function
         s += '======== Code ========\n'
         s += ' - api:%s' % self._api + '\n'
@@ -1219,8 +1215,7 @@ class model(object):
             s += ' - code:\n%s' % inspect.getsource(self._model_func.func_code) + '\n'
         else:
             s += ' - code:\n%s' % self._model_func + '\n'
-
-        return s
+        return s[:-1]
 
     # ==================== Load & Save ==================== #
     def save(self, path=None):
