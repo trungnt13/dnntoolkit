@@ -1621,7 +1621,7 @@ class trainer(object):
 
             if self._log_enable:
                 logger.progress(n, max_val=n_samples,
-                    title='%s:Cost:%.2f' % (task, np.mean(cost)),
+                    title='%s:Cost:%.4f' % (task, np.mean(cost)),
                     newline=self._log_newline)
 
             # batch end
@@ -1639,7 +1639,7 @@ class trainer(object):
             self._test_end(self)
 
         # ====== statistic of validation ====== #
-        logger.log('Valid Stats: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+        logger.log('Valid Stats: Mean:%.4f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
                 (np.mean(self.cost), np.var(self.cost), np.median(self.cost),
                 np.percentile(self.cost, 5), np.percentile(self.cost, 95)))
 
@@ -1693,7 +1693,7 @@ class trainer(object):
                 train_cost.append(cost)
                 if self._log_enable:
                     logger.progress(n, max_val=ntrain,
-                        title='Epoch:%d,Iter:%d,Cost:%.2f' % (i + 1, it, cost),
+                        title='Epoch:%d,Iter:%d,Cost:%.4f' % (i + 1, it, cost),
                         newline=self._log_newline)
 
                 # end batch
@@ -1718,7 +1718,7 @@ class trainer(object):
             # ====== end epoch: statistic of epoch cost ====== #
             self.cost = epoch_cost
             self.iter = it
-            logger.log('Train Stats: Mean:%.2f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+            logger.log('Train Stats: Mean:%.4f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
                     (np.mean(self.cost), np.var(self.cost), np.median(self.cost),
                     np.percentile(self.cost, 5), np.percentile(self.cost, 95)))
 
@@ -2684,7 +2684,7 @@ class visual():
         return fig
 
     @staticmethod
-    def bar_str(arr, max_arr=None):
+    def print_hinton(arr, max_arr=None, return_str=False):
         ''' Print bar string, fast way to visual magnitude of value in terminal
 
         Example:
@@ -2733,7 +2733,110 @@ class visual():
         rval = ''
         for r in result:
             rval += ''.join(r) + '\n'
-        return rval[:-1]
+        if return_str:
+            return rval[:-1]
+        else:
+            logger.log(rval)
+
+    def print_bar(x, height=20.0, bincount=None, binwidth=None, pch="o",
+                  title="", xlab=None, showSummary=False, regular=False):
+        '''
+        Parameters
+        ----------
+        x : list(number), numpy.ndarray, str(filepath)
+            input array
+        height : float
+            the height of the histogram in # of lines
+        bincount : int
+            number of bins in the histogram
+        binwidth : int
+            width of bins in the histogram
+        pch : str
+            shape of the bars in the plot, e.g 'o'
+        title : str
+            title at the top of the plot, None = no title
+        xlab : boolean
+            whether or not to display x-axis labels
+        showSummary : boolean
+            whether or not to display a summary
+        regular : boolean
+            whether or not to start y-labels at 0
+
+        '''
+        try:
+            import bashplotlib
+            if hasattr(x, 'flatten'):
+                x = x.flatten()
+            s = bashplotlib.plot_bar(x, height=height, bincount=bincount,
+                    binwidth=binwidth, pch=pch, colour="default",
+                    title=title, xlab=xlab, showSummary=showSummary,
+                    regular=regular, return_str=True)
+            logger.log(s)
+        except:
+            logger.warning('No bashplotlib available! Ignored!')
+
+    def print_scatter(x, y, size=None, pch="o", title=""):
+        '''
+        Parameters
+        ----------
+        x : list, numpy.ndarray
+            list of x series
+        y : list, numpy.ndarray
+            list of y series
+        size : int
+            width of plot
+        pch : str
+            any character to represent a points
+        title : str
+            title for the plot, None = not show
+        '''
+        try:
+            import bashplotlib
+            if hasattr(x, 'flatten'):
+                x = x.flatten()
+            if hasattr(y, 'flatten'):
+                y = y.flatten()
+            s = bashplotlib.plot_scatter(x, y, size=size, pch=pch,
+                colour='default', title=title, return_str=True)
+            logger.log(s)
+        except:
+            logger.warning('No bashplotlib available! Ignored!')
+
+    def print_hist(x, height=20.0, bincount=None, binwidth=None, pch="o",
+                  title="", xlab=None, showSummary=False, regular=False):
+        '''
+        Parameters
+        ----------
+        x : list(number), numpy.ndarray, str(filepath)
+            input array
+        height : float
+            the height of the histogram in # of lines
+        bincount : int
+            number of bins in the histogram
+        binwidth : int
+            width of bins in the histogram
+        pch : str
+            shape of the bars in the plot, e.g 'o'
+        title : str
+            title at the top of the plot, None = no title
+        xlab : boolean
+            whether or not to display x-axis labels
+        showSummary : boolean
+            whether or not to display a summary
+        regular : boolean
+            whether or not to start y-labels at 0
+        '''
+        try:
+            import bashplotlib
+            if hasattr(x, 'flatten'):
+                x = x.flatten()
+            s = bashplotlib.plot_hist(x, height=height, bincount=bincount,
+                    binwidth=binwidth, pch=pch, colour="default",
+                    title=title, xlab=xlab, showSummary=showSummary,
+                    regular=regular, return_str=True)
+            logger.log(s)
+        except:
+            logger.warning('No bashplotlib available! Ignored!')
 
     @staticmethod
     def plot_hinton(matrix, max_weight=None, ax=None):
@@ -2832,32 +2935,32 @@ class logger():
                     log.addHandler(fh)
 
     @staticmethod
-    def warning(*anything):
+    def warning(*anything, **kwargs):
         logger._check_init_logger()
         logger._default_logger.warning(*anything)
 
     @staticmethod
-    def error(*anything):
+    def error(*anything, **kwargs):
         logger._check_init_logger()
         logger._default_logger.error(*anything)
 
     @staticmethod
-    def critical(*anything):
+    def critical(*anything, **kwargs):
         logger._check_init_logger()
         logger._default_logger.critical(*anything)
 
     @staticmethod
-    def debug(*anything):
+    def debug(*anything, **kwargs):
         logger._check_init_logger()
         logger._default_logger.debug(*anything)
 
     @staticmethod
-    def info(*anything):
+    def info(*anything, **kwargs):
         logger._check_init_logger()
         logger._default_logger.info(*anything)
 
     @staticmethod
-    def log(*anything):
+    def log(*anything, **kwargs):
         '''This log is at INFO level'''
         import logging
         logger._check_init_logger()
