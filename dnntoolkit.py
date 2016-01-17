@@ -2531,7 +2531,7 @@ class visual():
         return axis
 
     @staticmethod
-    def plot_spectrogram(s, fs=8000, ax=None, colormap = "jet"):
+    def plot_spectrogram(s, fs=8000, ax=None, colormap = "jet", path=None):
         '''
         Example
         -------
@@ -2547,13 +2547,10 @@ class visual():
         if colormap is None:
             colormap = plt.cm.Blues
 
+        if hasattr(s, 'flatten'):
+            s = s.flatten()
         s = speech.spectrogram(s, fs, normalize=False, vad=False)
         s = 20. * np.log10(np.abs(s) / 10e-6) # amplitude to decibel
-
-        if s.shape[0] == 1 or s.shape[1] == 1:
-            pass
-        if s.shape[0] > s.shape[1]:
-            s = s.T
 
         ax = ax if ax is not None else plt.gca()
         img = ax.imshow(s, cmap=colormap, interpolation='bilinear',
@@ -2561,6 +2558,9 @@ class visual():
         plt.colorbar(img, ax=ax)
         plt.xlabel("time (#)")
         plt.ylabel("frequency (hz)")
+
+        if path:
+            plt.savefig(path, dpi=300, format='png', bbox_inches='tight')
         return ax
 
     @staticmethod
