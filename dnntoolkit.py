@@ -1202,8 +1202,12 @@ class model(object):
 
         # weight
         s += '======== Weights ========\n'
+        nb_params = 0
         for w in self._weights:
             s += ' - shape:%s' % str(w.shape) + '\n'
+            nb_params += np.prod(w.shape)
+        s += ' => Total: %d (parameters)' % nb_params
+        s += ' => Size: %d MB' % (nb_params * 4 / 1024 / 1024)
 
         # model function
         s += '======== Code ========\n'
