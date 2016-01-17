@@ -1192,14 +1192,6 @@ class model(object):
         s = ''
         s += 'Model: %s' % self._save_path + '\n'
 
-        # history
-        self._check_current_working_history()
-        for i in self._history:
-            if i == self._working_history:
-                s += '* ' + str(i) + '\n'
-            else:
-                s += i + '\n'
-
         # weight
         s += '======== Weights ========\n'
         nb_params = 0
@@ -1208,6 +1200,14 @@ class model(object):
             nb_params += np.prod(w.shape)
         s += ' => Total: %d (parameters)' % nb_params
         s += ' => Size: %d MB' % (nb_params * 4 / 1024 / 1024)
+
+        # history
+        self._check_current_working_history()
+        for i in self._history:
+            if i == self._working_history:
+                s += '* ' + str(i) + '\n'
+            else:
+                s += i + '\n'
 
         # model function
         s += '======== Code ========\n'
