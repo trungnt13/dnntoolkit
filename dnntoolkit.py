@@ -1036,10 +1036,10 @@ class model(object):
             if self._api == 'lasagne':
                 import lasagne
                 # create prediction function
-                input_layers = lasagne.layers.find_layers(self._model, types=lasagne.layers.InputLayer)
-                input_var = [l.input_var for l in input_layers]
                 self._pred = theano.function(
-                    inputs=input_var,
+                    inputs=[l.input_var for l in
+                        lasagne.layers.find_layers(
+                            self._model, types=lasagne.layers.InputLayer)],
                     outputs=lasagne.layers.get_output(self._model, deterministic=True),
                     allow_input_downcast=True,
                     on_unused_input=None)
