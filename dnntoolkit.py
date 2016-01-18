@@ -2704,6 +2704,7 @@ class visual():
         ax.set_xticks([])
         ax.set_yticks([])
         ax.axis('off')
+        ax.set_title(str(x.shape))
         img = ax.pcolorfast(x, cmap=colormap, alpha=0.8)
         plt.grid(True)
 
