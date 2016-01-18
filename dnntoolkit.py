@@ -1197,7 +1197,7 @@ class model(object):
             s += ' - shape:%s' % str(w.shape) + '\n'
             nb_params += np.prod(w.shape)
         s += ' => Total: %d (parameters)' % nb_params + '\n'
-        s += ' => Size: %.2f MB' % (nb_params * 4. / 1024. / 1024.)
+        s += ' => Size: %.2f MB' % (nb_params * 4. / 1024. / 1024.) + '\n'
         # history
         self._check_current_working_history()
         for i in self._history:
