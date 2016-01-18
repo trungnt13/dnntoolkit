@@ -29,9 +29,9 @@ dnntoolkit.logger.log(ds)
 # Model
 # ======================================================================
 def ffnet(indim, outdim):
-    indim = int(indim)
     outdim = int(outdim)
-    l_in = lasagne.layers.InputLayer(shape=(None, indim))
+    l_in = lasagne.layers.InputLayer(shape=(None,) + indim)
+    l_in = lasagne.layers.FlattenLayer(l_in)
     l_in = lasagne.layers.DropoutLayer(l_in, p=0.3)
     l_hid = lasagne.layers.DenseLayer(l_in, num_units=256,
         nonlinearity=lasagne.nonlinearities.rectify)
@@ -44,7 +44,7 @@ def ffnet(indim, outdim):
 # ======================================================================
 m = dnntoolkit.model('tmp/tmp.ai')
 m.set_model(ffnet, api='lasagne',
-            indim=np.prod(ds['X_train'].shape[1:]),
+            indim=ds['X_train'].shape[1:],
             outdim=ds['y_train'].shape[1])
 net = m.create_model()
 
@@ -108,14 +108,10 @@ trainer.set_strategy(
 )
 
 # ==================== Callback ==================== #
-def batch_start(trainer):
-    X = trainer.data[0]
-    y = trainer.data[1]
-    trainer.data = (X.reshape(-1, X.shape[1] * X.shape[2]), y)
-
 def epoch_end(trainer):
     m.record(np.mean(trainer.cost), trainer.task, 'epoch_end')
     # ====== Visual weights ====== #
+    plt.close('all')
     weights = m.get_weights()
     nrows = int(np.ceil(np.sqrt(len(weights))))
     ncols = nrows
@@ -133,7 +129,8 @@ def batch_end(trainer):
 def valid_end(trainer):
     m.record(np.mean(trainer.cost), 'valid_end')
     cost = [1 - i for i in m.select('valid_end')]
-    shouldSave, shoudlStop = dnntoolkit.earlystop(cost, generalization_loss=True, threshold=3)
+    shouldSave, shoudlStop = dnntoolkit.dnn.earlystop(
+        cost, generalization_loss=True, threshold=3)
     if shouldSave:
         # dnntoolkit.logger.info('\nShould save!')
         m.save()
@@ -154,8 +151,7 @@ def test_start(trainer):
 def test_end(trainer):
     m.record(np.mean(trainer.cost), 'test_end')
 
-trainer.set_callback(batch_start=batch_start,
-                    epoch_end=epoch_end, batch_end=batch_end,
+trainer.set_callback(epoch_end=epoch_end, batch_end=batch_end,
                     train_end=train_end, valid_end=valid_end,
                     test_start=test_start, test_end=test_end)
 
@@ -182,7 +178,7 @@ if W_rollbacked is not None:
         dnntoolkit.logger.critical('W differences: %.4f' % (np.sum(i - j)))
 
 # ====== Test prediction ====== #
-test_pred = m.pred(ds['X_test'][:].reshape(-1, 28 * 28))
+test_pred = m.pred(ds['X_test'][:])
 test_pred = np.argmax(test_pred, axis=1)
 test_true = np.argmax(ds['y_test'][:], axis=1)
 hit = np.sum(test_pred == test_true)

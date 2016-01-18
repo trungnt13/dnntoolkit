@@ -281,9 +281,9 @@ class io():
                 return i[1]
         return None
 
-# ======================================================================
-# Stats
-# ======================================================================
+# ===========================================================================
+# Statistic
+# ===========================================================================
 class stats():
     pass
 
@@ -291,9 +291,7 @@ class stats():
 # Array Utils
 # ======================================================================
 class tensor():
-    # ======================================================================
-    # Sequence processing
-    # ======================================================================
+    # ==================== Sequence processing ==================== #
 
     @staticmethod
     def pad_sequences(sequences, maxlen=None, dtype='int32',
@@ -446,9 +444,7 @@ class tensor():
             i += j
         return out
 
-    # ======================================================================
-    # Theano
-    # ======================================================================
+    # ==================== theano ==================== #
 
     @staticmethod
     def floatX(X):
@@ -528,9 +524,9 @@ class GPU():
         from theano.sandbox.cuda.dnn import dnn_available as d
         logger.debug(d() or d.msg)
 
-# ======================================================================
-# Early stop
-# ======================================================================
+# ===========================================================================
+# DNN utilities
+# ===========================================================================
 def _check_gs(validation):
     ''' Generalization sensitive:
     validation is list of cost values (assumpt: lower is better)
@@ -624,48 +620,98 @@ def _check_hope_and_hop(validation):
         shouldSave = -1
     return shouldSave, shouldStop
 
-# ====== early stop ====== #
-def earlystop(costs, generalization_loss = False, generalization_sensitive=False, hope_hop=False, threshold=None):
-    ''' Early stop.
+class dnn():
 
-    Parameters
-    ----------
-    generalization_loss : type
-        note
-    generalization_sensitive : type
-        note
-    hope_hop : type
-        note
+    @staticmethod
+    def earlystop(costs, generalization_loss = False,
+        generalization_sensitive=False, hope_hop=False,
+        threshold=None):
+        ''' Early stop.
 
-    Returns
-    -------
-    return : boolean, boolean
-        shouldSave, shouldStop
+        Parameters
+        ----------
+        generalization_loss : type
+            note
+        generalization_sensitive : type
+            note
+        hope_hop : type
+            note
 
-    '''
-    values = costs
-    shouldSave = 0
-    shouldStop = 0
-    if generalization_loss:
-        if threshold is not None:
-            save, stop = _check_gl(values, threshold)
-        else:
-            save, stop = _check_gl(values)
-        shouldSave += save
-        shouldStop += stop
-    if generalization_sensitive:
-        save, stop = _check_gs(values)
-        shouldSave += save
-        shouldStop += stop
-    if hope_hop:
-        save, stop = _check_hope_and_hop(values)
-        shouldSave += save
-        shouldStop += stop
-    return shouldSave > 0, shouldStop > 0
+        Returns
+        -------
+        return : boolean, boolean
+            shouldSave, shouldStop
 
-# ======================================================================
+        '''
+        values = costs
+        shouldSave = 0
+        shouldStop = 0
+        if generalization_loss:
+            if threshold is not None:
+                save, stop = _check_gl(values, threshold)
+            else:
+                save, stop = _check_gl(values)
+            shouldSave += save
+            shouldStop += stop
+        if generalization_sensitive:
+            save, stop = _check_gs(values)
+            shouldSave += save
+            shouldStop += stop
+        if hope_hop:
+            save, stop = _check_hope_and_hop(values)
+            shouldSave += save
+            shouldStop += stop
+        return shouldSave > 0, shouldStop > 0
+
+    @staticmethod
+    def check_weights(weights):
+        raise NotImplementedError()
+
+    @staticmethod
+    def check_gradients(gradients, epsilon=10e-8, threshold=10e4):
+        '''
+        Returns
+        -------
+        False : nothing wrong with gradients
+        1 : Nan in gradients
+        2 : 25 percentage of gradients ~ 0.
+        3 : gradients is exploded
+        '''
+        first_grads = None
+        last_grads = None
+
+        # ====== only need to check the first gradients ====== #
+        for g in gradients:
+            if g.ndim >= 2:
+                first_grads = g
+                break
+        if first_grads is None:
+            first_grads = gradients[0]
+
+        # ====== get statistic of grads ====== #
+        # NaN gradients
+        if np.isnan(np.min(first_grads)):
+            return 1
+        # too small value: Vanishing
+        if np.abs(np.percentile(first_grads, 0.25)) < 0. + epsilon:
+            return 2
+
+        # ====== Compare to last gradients ====== #
+        for g in reversed(gradients):
+            if g.ndim >= 2:
+                last_grads = g
+                break
+        if last_grads is None:
+            last_grads = gradients[-1]
+
+        # exploding
+        if np.mean(last_grads) / np.mean(first_grads) > threshold:
+            return 3
+        return False
+
+# ===========================================================================
 # Model
-# ======================================================================
+# ===========================================================================
 def _get_ms_time():
     return int(round(time.time() * 1000)) # in ms
 
@@ -1726,8 +1772,8 @@ class trainer(object):
             self._test_end(self)
 
         # ====== statistic of validation ====== #
-        logger.log('\n => Valid Stats: Mean:%.4f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
-                (np.mean(self.cost), np.var(self.cost), np.median(self.cost),
+        logger.log('\n => %s Stats: Mean:%.4f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+                (task, np.mean(self.cost), np.var(self.cost), np.median(self.cost),
                 np.percentile(self.cost, 5), np.percentile(self.cost, 95)))
 
         # ====== reset all flag ====== #
@@ -2871,7 +2917,7 @@ class visual():
                     regular=regular, return_str=True)
             logger.log(s)
         except Exception, e:
-            logger.warning('Error happened! Ignored! \n %s' % str(e))
+            logger.warning('print_bar: Error! Ignored! \n %s' % str(e))
 
     @staticmethod
     def print_scatter(x, y, size=None, pch="o", title=""):
@@ -2899,7 +2945,7 @@ class visual():
                 colour='default', title=title, return_str=True)
             logger.log(s)
         except Exception, e:
-            logger.warning('Error happened! Ignored! \n %s' % str(e))
+            logger.warning('print_scatter Error! Ignored! \n %s' % str(e))
 
     @staticmethod
     def print_hist(x, height=20.0, bincount=None, binwidth=None, pch="o",
@@ -2936,7 +2982,7 @@ class visual():
                     regular=regular, return_str=True)
             logger.log(s)
         except Exception, e:
-            logger.warning('Error happened! Ignored! \n %s' % str(e))
+            logger.warning('print_hist Error! Ignored! \n %s' % str(e))
 
     @staticmethod
     def plot_hinton(matrix, max_weight=None, ax=None):
