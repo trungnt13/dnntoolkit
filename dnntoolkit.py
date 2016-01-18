@@ -946,6 +946,13 @@ class model(object):
             self._weights.append(w.astype(np.float32))
 
     def get_weights(self):
+        if self._model is not None and len(self._weights) == 0:
+            if self._api == 'lasagne':
+                import lasagne
+                self.set_weights(
+                    lasagne.layers.get_all_param_values(self._model))
+            else:
+                logger.warning('Need support for new API %s' % self._api)
         return self._weights
 
     def set_pred(self, pred_func):
