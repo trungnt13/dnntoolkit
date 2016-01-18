@@ -1418,6 +1418,7 @@ class trainer(object):
 
         self._stop = False
         self._valid_now = False
+        self._restart_now = False
 
         self._log_enable = True
         self._log_newline = False
@@ -1433,7 +1434,7 @@ class trainer(object):
 
     def restart(self):
         ''' Trigger restart current process immediatelly '''
-        self._restart_now = Tru
+        self._restart_now = True
 
     # ==================== Setter ==================== #
     def set_action(self, name, action,
@@ -1630,20 +1631,34 @@ class trainer(object):
         self._valid_now = False
         return tmp
 
+    def _early_restart(sefl):
+        # just a function reset valid flag and return its value
+        tmp = self._restart_now
+        self._restart_now = False
+        return tmp
+
     def _create_iter(self, names, batch, shuffle):
         seed = self._seed.next()
         data = [self._dataset[i].iter(batch, shuffle=shuffle, seed=seed) for i in names]
         return enumerate(zip(*data))
 
-    def _finish_train(self, train_cost):
+    def _finish_train(self, train_cost, restart=False):
         self.cost = train_cost
         self._train_end(self) # callback
         self.cost = None
         self.task = None
+        self.data = None
         self.it = 0
+        return not restart
 
     # ==================== Main workflow ==================== #
     def _cost(self, task, valid_data, batch):
+        '''
+        Return
+        ------
+        True: finished the task
+        False: restart the task
+        '''
         self.task = task
         self.iter = 0
         if task == 'valid':
@@ -1698,8 +1713,15 @@ class trainer(object):
         self.cost = None
         self.task = None
         self.iter = 0
+        return True
 
     def _train(self, train_data, valid_data, epoch, batch, validfreq, shuffle):
+        '''
+        Return
+        ------
+        True: finished the task
+        False: restart the task
+        '''
         self.task = 'train'
         self.iter = 0
         self._train_start(self)
@@ -1715,8 +1737,7 @@ class trainer(object):
             self.iter = it
             self._epoch_start(self) # callback
             if self._early_stop(): # earlystop
-                self._finish_train(train_cost)
-                return
+                return self._finish_train(train_cost, self._early_restart())
             epoch_cost = []
             n = 0
             # ====== start batches ====== #
@@ -1727,6 +1748,8 @@ class trainer(object):
                 self.data = data
                 self.iter = it
                 self._batch_start(self) # callback
+                if self._early_stop(): # earlystop
+                    return self._finish_train(train_cost, self._early_restart())
 
                 # main updates
                 cost = self._updates_func(*self.data)
@@ -1746,16 +1769,14 @@ class trainer(object):
                 self.data = None
                 self.cost = None
                 if self._early_stop(): # earlystop
-                    self._finish_train(train_cost)
-                    return
+                    return self._finish_train(train_cost, self._early_restart())
 
                 # validation
                 if (it > 0 and it % validfreq == 0) or self._early_valid():
                     if valid_data is not None:
                         self._cost('valid', valid_data, batch)
                         if self._early_stop(): # earlystop
-                            self._finish_train(train_cost)
-                            return
+                            return self._finish_train(train_cost, self._early_restart())
                     self.task = 'train' # restart flag back to train
 
             # ====== end epoch: statistic of epoch cost ====== #
@@ -1768,11 +1789,10 @@ class trainer(object):
             self._epoch_end(self) # callback
             self.cost = None
             if self._early_stop(): # earlystop
-                self._finish_train(train_cost)
-                return
+                return self._finish_train(train_cost, self._early_restart())
 
         # end training
-        self._finish_train(train_cost)
+        return self._finish_train(train_cost, self._early_restart())
 
     def run(self):
         ''' run specified strategies
@@ -1811,17 +1831,21 @@ class trainer(object):
                     if train is None:
                         logger.warning('*** no TRAIN data found, ignored **')
                     else:
-                        self._train(train, valid, epoch, batch, validfreq, shuffle)
+                        while (not self._train(
+                                train, valid, epoch, batch, validfreq, shuffle)):
+                            pass
                 elif 'valid' in task:
                     if valid is None:
                         logger.warning('*** no VALID data found, ignored **')
                     else:
-                        self._cost('valid', valid, batch)
+                        while (not self._cost('valid', valid, batch)):
+                            pass
                 elif 'test' in task:
                     if test is None:
                         logger.warning('*** no TEST data found, ignored **')
                     else:
-                        self._cost('test', test, batch)
+                        while (not self._cost('test', test, batch)):
+                            pass
                 # only increase idx after finish the task
                 self.idx += 1
         except Exception, e:
