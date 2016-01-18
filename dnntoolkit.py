@@ -1096,11 +1096,6 @@ class model(object):
 
         return self
 
-    def print_model(self):
-        import inspect
-        if self._model_func is not None:
-            logger.log(inspect.getsource(self._model_func))
-
     # ==================== History manager ==================== #
     def _check_current_working_history(self):
         if len(self._history) == 0:
@@ -1197,6 +1192,11 @@ class model(object):
 
         for i in self._history:
             logger.log(i)
+
+    def print_code(self):
+        import inspect
+        if self._model_func is not None:
+            logger.log(inspect.getsource(self._model_func))
 
     def __str__(self):
         import inspect
