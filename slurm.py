@@ -242,7 +242,21 @@ def slurm_parser():
             help='path to python script & its arguments (e.g. script.py arg1 arg2 ...)')
 
     return parser
+# ======================================================================
+# Utilities
+# ======================================================================
+def cancel_all(username):
+    ''' only work on UNIX '''
+    import commands
+    command = "squeue | grep -v 'grep' | grep %s | awk '{print $1}'" % username
+    status, output = commands.getstatusoutput(command)
+    if len(output) > 0:
+        output = output.split('\n')
+        os.system('scancel ' + ' '.join(output))
 
+# ======================================================================
+# Main
+# ======================================================================
 # python runner.py -t MFCC -d 30 -p cpu -m 16000 -np 8 -f feature_extract.py set01.dat 10 20 10 2500 8
 if __name__ == '__main__':
     parser = slurm_parser()
