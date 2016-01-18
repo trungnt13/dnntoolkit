@@ -2089,6 +2089,7 @@ class _batch(object):
         self._key = key
         self._hdf = hdf
         self._data = []
+        self._normalizer = lambda x: x
 
         for key, hdf in zip(self._key, self._hdf):
             if key in hdf:
@@ -2131,6 +2132,18 @@ class _batch(object):
     def value(self):
         self._is_dataset_init()
         return np.concatenate([i.value for i in self._data], axis=0)
+
+    def set_normalizer(self, normalizer):
+        '''
+        Parameters
+        ----------
+        normalizer : callable
+            a function(X)
+        '''
+        if normalizer is None:
+            self._normalizer = lambda x: x
+        else:
+            self._normalizer = normalizer
 
     # ==================== Arithmetic ==================== #
     def sum2(self, axis=0):
@@ -2228,7 +2241,7 @@ class _batch(object):
         return self
 
     def _iter_fast(self, ds, batch_size, start=None, end=None,
-            shuffle=True, seed=None, normalizer=None):
+            shuffle=True, seed=None):
         # craete random seed
         prng1 = None
         prng2 = _dummy_shuffle
@@ -2245,13 +2258,10 @@ class _batch(object):
         for i, j in batches:
             data = ds[i:j]
             prng2.shuffle(data) # this will slow thing a little bit
-            if normalizer is None:
-                yield data
-            else:
-                yield normalizer(data)
+            yield normalizer(data)
 
     def _iter_slow(self, batch_size=128, start=None, end=None,
-        shuffle=True, seed=None, normalizer=None, mode=0):
+        shuffle=True, seed=None, mode=0):
         # ====== Set random seed ====== #
         all_ds = self._data[:]
         prng1 = None
@@ -2312,10 +2322,7 @@ class _batch(object):
             batches = np.concatenate(
                 [all_ds[i][j[0]:j[1]] for i, j in _], axis=0)
             prng2.shuffle(batches)
-            if normalizer is None:
-                yield batches
-            else:
-                yield normalizer(batches)
+            yield normalizer(batches)
 
     def iter(self, batch_size=128, start=None, end=None,
         shuffle=True, seed=None, normalizer=None, mode=0):
@@ -2359,15 +2366,16 @@ class _batch(object):
          function
         '''
         self._is_dataset_init()
+        self.set_normalizer(normalizer)
         if batch_size == 'auto':
             batch_size = _auto_batch_size(self.shape)
 
         if len(self._data) == 1:
             return self._iter_fast(self._data[0], batch_size, start, end,
-                                   shuffle, seed, normalizer)
+                                   shuffle, seed)
         else:
             return self._iter_slow(batch_size, start, end, shuffle, seed,
-                                   normalizer, mode)
+                                   mode)
 
     def __len__(self):
         self._is_dataset_init()
