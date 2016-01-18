@@ -1099,7 +1099,8 @@ class model(object):
             else:
                 self._history = []
             self._history_updated = True
-
+        else:
+            logger.warning('No checkpoint found! Ignored rollback!')
         return self
 
     # ==================== History manager ==================== #
