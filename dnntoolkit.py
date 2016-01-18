@@ -942,6 +942,10 @@ class model(object):
 
     # ==================== Model manager ==================== #
     def set_weights(self, weights):
+        '''
+        weights : list(np.ndarray)
+            list of all numpy array contain parameters
+        '''
         self._weights = []
         for w in weights:
             self._weights.append(w.astype(np.float32))
