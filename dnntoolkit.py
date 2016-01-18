@@ -951,6 +951,8 @@ class model(object):
             self._weights.append(w.astype(np.float32))
 
     def get_weights(self):
+        '''This method will fetch weights from current networks if don't
+        found any weights'''
         if self._model is not None and len(self._weights) == 0:
             if self._api == 'lasagne':
                 import lasagne
