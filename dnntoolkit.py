@@ -1631,7 +1631,7 @@ class trainer(object):
         self._valid_now = False
         return tmp
 
-    def _early_restart(sefl):
+    def _early_restart(self):
         # just a function reset valid flag and return its value
         tmp = self._restart_now
         self._restart_now = False
