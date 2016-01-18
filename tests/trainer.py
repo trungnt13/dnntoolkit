@@ -97,10 +97,10 @@ trainer.set_model(cost_func=f_cost, updates_func=f_updates)
 trainer.set_strategy(
     task='train',
     data={'train': ['X_train', 'y_train'], 'valid': ['X_valid', 'y_valid']},
-    epoch=5,
+    epoch=50,
     batch=256,
     shuffle=True,
-    validfreq=0.5,
+    validfreq=0.6,
     seed=dnntoolkit.MAGIC_SEED
 ).set_strategy(
     task='test',
