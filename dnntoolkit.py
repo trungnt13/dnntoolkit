@@ -2749,7 +2749,7 @@ class visual():
 
     @staticmethod
     def print_bar(x, height=20.0, bincount=None, binwidth=None, pch="o",
-                  title="", xlab=None, showSummary=False, regular=False):
+                  title="", xlab=False, showSummary=False, regular=False):
         '''
         Parameters
         ----------
@@ -2815,7 +2815,7 @@ class visual():
 
     @staticmethod
     def print_hist(x, height=20.0, bincount=None, binwidth=None, pch="o",
-                  title="", xlab=None, showSummary=False, regular=False):
+                  title="", xlab=False, showSummary=False, regular=False):
         '''
         Parameters
         ----------
