@@ -1688,7 +1688,7 @@ class trainer(object):
             if self._log_enable:
                 logger.progress(n, max_val=n_samples,
                     title='%s:Cost:%.4f' % (task, np.mean(cost)),
-                    newline=self._log_newline)
+                    newline=self._log_newline, idx=task)
 
             # batch end
             self.cost = cost
@@ -1760,7 +1760,7 @@ class trainer(object):
                 if self._log_enable:
                     logger.progress(n, max_val=ntrain,
                         title='Epoch:%d,Iter:%d,Cost:%.4f' % (i + 1, it, cost),
-                        newline=self._log_newline)
+                        newline=self._log_newline, idx='train')
 
                 # end batch
                 self.cost = cost
@@ -3038,7 +3038,10 @@ class logger():
         for h in logger._default_logger.handlers:
             h.setFormatter(logging.Formatter(fmt = '%(message)s'))
 
-        logger._default_logger.info(*anything)
+        if len(anything) == 0:
+            logger._default_logger.info('')
+        else:
+            logger._default_logger.info(*anything)
 
         # format with time and level
         for h in logger._default_logger.handlers:
@@ -3046,10 +3049,32 @@ class logger():
                 fmt = '%(asctime)s %(levelname)s  %(message)s',
                 datefmt = '%d/%m/%Y %I:%M:%S'))
 
+    _last_progress_idx = None
+
     @staticmethod
-    def progress(p, max_val=1.0, title='Progress', bar='=', newline=False):
+    def progress(p, max_val=1.0, title='Progress', bar='=', newline=False, idx=None):
+        '''
+        Parameters
+        ----------
+        p : number
+            current progress value
+        max_val : number
+            maximum value progress can reach
+        idx : anything
+            identification of current progress, if 2 progress is diffrent, print
+            newline to switch to print new progress
+
+        Notes
+        -----
+        This methods is not thread safe
+        '''
         if not logger._is_enable:
             return
+        # ====== Check same progress or not ====== #
+        if logger._last_progress_idx != idx:
+            print()
+        logger._last_progress_idx = idx
+
         # ====== Config ====== #
         if p < 0: p = 0.0
         if p > max_val: p = max_val
@@ -3075,9 +3100,8 @@ class logger():
         bar = '=' * n_bar + '>' + ' ' * (max_val_bar - n_bar)
         sys.stdout.write(fmt_str % (title, p, max_val, bar, eta, etd))
         sys.stdout.flush()
-
-        if p >= max_val:
-            sys.stdout.write("\n")
+        # if p >= max_val:
+        #     sys.stdout.write("\n")
 
     @staticmethod
     def create_logger(name=None, logging_path=None, mode='w', multiprocess=False):
@@ -3625,7 +3649,9 @@ class net():
 
             def dl_progress(count, block_size, total_size):
                 logger.progress(count * block_size, total_size,
-                    title='Downloading %s' % fname)
+                    title='Downloading %s' % fname, newline=False,
+                    idx='downloading')
+                logger.log()
 
             ParanoidURLopener().retrieve(origin, fpath, dl_progress)
             progbar = None
