@@ -1066,7 +1066,8 @@ class model(object):
                     inputs=[l.input_var for l in
                         lasagne.layers.find_layers(
                             self._model, types=lasagne.layers.InputLayer)],
-                    outputs=lasagne.layers.get_output(self._model, deterministic=True),
+                    outputs=lasagne.layers.get_output(
+                        self._model, deterministic=True),
                     allow_input_downcast=True,
                     on_unused_input=None)
             else:
@@ -1151,9 +1152,13 @@ class model(object):
         raise ValueError('Model index must be [slice],\
             [int] or [str], or list of string')
 
+    def get_working_history(self):
+        self._check_current_working_history()
+        return self._working_history
+
     def new_frame(self, name=None, description=None):
         self._history.append(_history(name, description))
-        self._working_history = self._history[-1]
+        self._history_updated = True
 
     def drop_frame(self):
         if len(self._history) < 2:
@@ -1721,7 +1726,7 @@ class trainer(object):
             self._test_end(self)
 
         # ====== statistic of validation ====== #
-        logger.log('Valid Stats: Mean:%.4f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+        logger.log('\n => Valid Stats: Mean:%.4f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
                 (np.mean(self.cost), np.var(self.cost), np.median(self.cost),
                 np.percentile(self.cost, 5), np.percentile(self.cost, 95)))
 
@@ -1798,7 +1803,7 @@ class trainer(object):
             # ====== end epoch: statistic of epoch cost ====== #
             self.cost = epoch_cost
             self.iter = it
-            logger.log('Train Stats: Mean:%.4f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+            logger.log('\n => Epoch Stats: Mean:%.4f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
                     (np.mean(self.cost), np.var(self.cost), np.median(self.cost),
                     np.percentile(self.cost, 5), np.percentile(self.cost, 95)))
 
@@ -2664,6 +2669,12 @@ class visual():
         path : str
             if path is specified, save png image to given path
 
+        Notes
+        -----
+        Make sure nrow and ncol in add_subplot is int or this error will show up
+         - ValueError: The truth value of an array with more than one element is
+            ambiguous. Use a.any() or a.all()
+
         Example
         -------
         >>> x = np.random.rand(2000, 1000)
@@ -2684,6 +2695,8 @@ class visual():
 
         if x.ndim > 2:
             raise ValueError('No support for > 2D')
+        elif x.ndim == 1:
+            x = x[:, None]
 
         ax = ax if ax is not None else plt.gca()
         ax.set_aspect('equal', 'box')
@@ -2856,8 +2869,8 @@ class visual():
                     title=title, xlab=xlab, showSummary=showSummary,
                     regular=regular, return_str=True)
             logger.log(s)
-        except:
-            logger.warning('No bashplotlib available! Ignored!')
+        except Exception, e:
+            logger.warning('Error happened! Ignored! \n %s' % str(e))
 
     @staticmethod
     def print_scatter(x, y, size=None, pch="o", title=""):
@@ -2884,8 +2897,8 @@ class visual():
             s = bashplotlib.plot_scatter(x, y, size=size, pch=pch,
                 colour='default', title=title, return_str=True)
             logger.log(s)
-        except:
-            logger.warning('No bashplotlib available! Ignored!')
+        except Exception, e:
+            logger.warning('Error happened! Ignored! \n %s' % str(e))
 
     @staticmethod
     def print_hist(x, height=20.0, bincount=None, binwidth=None, pch="o",
@@ -2921,8 +2934,8 @@ class visual():
                     title=title, xlab=xlab, showSummary=showSummary,
                     regular=regular, return_str=True)
             logger.log(s)
-        except:
-            logger.warning('No bashplotlib available! Ignored!')
+        except Exception, e:
+            logger.warning('Error happened! Ignored! \n %s' % str(e))
 
     @staticmethod
     def plot_hinton(matrix, max_weight=None, ax=None):
@@ -3667,7 +3680,6 @@ class net():
                 logger.progress(count * block_size, total_size,
                     title='Downloading %s' % fname, newline=False,
                     idx='downloading')
-                logger.log()
 
             ParanoidURLopener().retrieve(origin, fpath, dl_progress)
             progbar = None
