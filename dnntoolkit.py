@@ -1371,12 +1371,13 @@ class trainer(object):
     """
     TODO: request validation function, add custome data (not instance of dataset)
     Value can be queried on callback:
-     - idx: current run idx in the strategies
+     - idx(int): current run idx in the strategies, start from 0
      - cost: current training, testing, validating cost
-     - iter: number of iteration
+     - iter(int): number of iteration, start from 0
      - data: current data (batch_start)
-     - epoch: current epoch
-     - task: current task
+     - epoch(int): current epoch, start from 0
+     - task(str): current task 'train', 'test', 'valid'
+     - n(int): count amount of sample learned
     Command can be triggered when running:
      - stop()
      - valid()
@@ -1786,7 +1787,6 @@ class trainer(object):
                 validfreq = config['validfreq']
                 shuffle = config['shuffle']
 
-                self.idx += 1
                 if self._log_enable:
                     logger.log('\n******* %d-th run, with configuration: *******' % self.idx)
                     logger.log(' - Task:%s' % task)
@@ -1814,6 +1814,8 @@ class trainer(object):
                         logger.warning('*** no TEST data found, ignored **')
                     else:
                         self._cost('test', test, batch)
+                # only increase idx after finish the task
+                self.idx += 1
         except Exception, e:
             logger.error(str(e))
             import traceback; traceback.print_exc();
