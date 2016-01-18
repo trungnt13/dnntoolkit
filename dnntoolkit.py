@@ -1371,12 +1371,15 @@ class trainer(object):
     """
     TODO: request validation function, add custome data (not instance of dataset)
     Value can be queried on callback:
-        idx: current run idx in the strategies
-        cost: current training, testing, validating cost
-        iter: number of iteration
-        data: current data (batch_start)
-        epoch: current epoch
-        task: current task
+     - idx: current run idx in the strategies
+     - cost: current training, testing, validating cost
+     - iter: number of iteration
+     - data: current data (batch_start)
+     - epoch: current epoch
+     - task: current task
+    Command can be triggered when running:
+     - stop()
+     - valid()
     """
 
     def __init__(self):
@@ -1408,14 +1411,19 @@ class trainer(object):
         self._test_end = _callback
 
         self._stop = False
+        self._valid_now = False
 
         self._log_enable = True
         self._log_newline = False
 
-    # ==================== Command ==================== #
+    # ==================== Trigger Command ==================== #
     def stop(self):
         ''' Stop current activity of this trainer immediatelly '''
         self._stop = True
+
+    def valid(self):
+        ''' Trigger validation immediatelly, asap '''
+        self._valid_now = True
 
     # ==================== Setter ==================== #
     def set_action(self, name, action,
@@ -1599,11 +1607,17 @@ class trainer(object):
             self._seed = seed_generator(seed)
         return self
 
-    # ==================== Logic ==================== #
+    # ==================== Helper function ==================== #
     def _early_stop(self):
-        # just a function reset stop function and return its value
+        # just a function reset stop flag and return its value
         tmp = self._stop
         self._stop = False
+        return tmp
+
+    def _early_valid(self):
+        # just a function reset valid flag and return its value
+        tmp = self._valid_now
+        self._valid_now = False
         return tmp
 
     def _create_iter(self, names, batch, shuffle):
@@ -1611,6 +1625,14 @@ class trainer(object):
         data = [self._dataset[i].iter(batch, shuffle=shuffle, seed=seed) for i in names]
         return enumerate(zip(*data))
 
+    def _finish_train(self, train_cost):
+        self.cost = train_cost
+        self._train_end(self) # callback
+        self.cost = None
+        self.task = None
+        self.it = 0
+
+    # ==================== Main workflow ==================== #
     def _cost(self, task, valid_data, batch):
         self.task = task
         self.iter = 0
@@ -1667,13 +1689,6 @@ class trainer(object):
         self.task = None
         self.iter = 0
 
-    def _finish_train(self, train_cost):
-        self.cost = train_cost
-        self._train_end(self) # callback
-        self.cost = None
-        self.task = None
-        self.it = 0
-
     def _train(self, train_data, valid_data, epoch, batch, validfreq, shuffle):
         self.task = 'train'
         self.iter = 0
@@ -1726,7 +1741,7 @@ class trainer(object):
                     return
 
                 # validation
-                if it > 0 and it % validfreq == 0:
+                if (it > 0 and it % validfreq == 0) or self._early_valid():
                     if valid_data is not None:
                         self._cost('valid', valid_data, batch)
                         if self._early_stop(): # earlystop
@@ -1845,7 +1860,6 @@ class trainer(object):
             s += ' - Shuffle:%s' % st['shuffle'] + '\n'
 
         return s
-
 
 # ======================================================================
 # Data Preprocessing
