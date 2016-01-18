@@ -940,28 +940,45 @@ class model(object):
         self._model = None
         self._pred = None
 
-    # ==================== Model manager ==================== #
+    # ==================== Weights ==================== #
     def set_weights(self, weights):
         '''
         weights : list(np.ndarray)
             list of all numpy array contain parameters
+
+        Notes
+        -----
+        - if set_model is called, this methods will set_weights for your AI also
         '''
+        # fetch new weights
         self._weights = []
         for w in weights:
             self._weights.append(w.astype(np.float32))
+        # set model weights
+        if self._model is not None:
+            try:
+                if self._api == 'lasagne':
+                    import lasagne
+                    lasagne.layers.set_all_param_values(
+                        self._model, self._weights)
+                else:
+                    logger.warning('Need support for new API %s' % self._api)
+            except Exception, e:
+                logger.error('Unable to set weights for AI: %s' % str(e))
 
     def get_weights(self):
-        '''This method will fetch weights from current networks if don't
-        found any weights'''
-        if self._model is not None and len(self._weights) == 0:
+        ''' if set_model is called, and your AI is created, always return the
+        newest weights from AI
+        '''
+        if self._model is not None:
             if self._api == 'lasagne':
                 import lasagne
-                self.set_weights(
-                    lasagne.layers.get_all_param_values(self._model))
+                self._weights = lasagne.layers.get_all_param_values(self._model)
             else:
                 logger.warning('Need support for new API %s' % self._api)
         return self._weights
 
+    # ==================== Network manipulation ==================== #
     def set_pred(self, pred_func):
         self._pred = pred_func
 
@@ -1029,6 +1046,9 @@ class model(object):
                     logger.critical('*** Cannot load old weights ***')
                     logger.error(str(e))
                     import traceback; traceback.print_exc();
+            # fetch new weights into model
+            else:
+                self.get_weights()
         return self._model
 
     def pred(self, *X):
@@ -1236,6 +1256,8 @@ class model(object):
 
     # ==================== Load & Save ==================== #
     def save(self, path=None):
+        '''
+        '''
         if path is None and self._save_path is None:
             raise ValueError("Save path haven't specified!")
         path = path if path is not None else self._save_path
@@ -1258,19 +1280,13 @@ class model(object):
             f['sandbox'] = cPickle.dumps(self._sandbox)
             f['api'] = self._api
 
-        # model is not None, get weight from model
-        if self._model is not None:
-            if self._api == 'lasagne':
-                import lasagne
-                self.set_weights(
-                    lasagne.layers.get_all_param_values(self._model))
-
-        # check weights
+        # check weights, always fetch newest weights from model
         weights = self.get_weights()
-        if len(weights) > 0:
-            for i, w in enumerate(weights):
-                f['weight_%d' % i] = w
-            f['nb_weights'] = len(weights)
+        for i, w in enumerate(weights):
+            f['weight_%d' % i] = w
+        f['nb_weights'] = len(weights)
+
+        #end
         f.close()
 
     @staticmethod
