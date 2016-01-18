@@ -1209,7 +1209,8 @@ class model(object):
         # weight
         s += '======== Weights ========\n'
         nb_params = 0
-        for w in self._weights:
+        # it is critical to get_weights here to fetch weight from created model
+        for w in self.get_weights():
             s += ' - shape:%s' % str(w.shape) + '\n'
             nb_params += np.prod(w.shape)
         s += ' => Total: %d (parameters)' % nb_params + '\n'
