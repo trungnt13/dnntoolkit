@@ -1262,10 +1262,12 @@ class model(object):
                 self.set_weights(
                     lasagne.layers.get_all_param_values(self._model))
 
-        if len(self._weights) > 0:
-            for i, w in enumerate(self._weights):
+        # check weights
+        weights = self.get_weights()
+        if len(weights) > 0:
+            for i, w in enumerate(weights):
                 f['weight_%d' % i] = w
-            f['nb_weights'] = len(self._weights)
+            f['nb_weights'] = len(weights)
         f.close()
 
     @staticmethod
@@ -1377,10 +1379,10 @@ class trainer(object):
      - data: current data (batch_start)
      - epoch(int): current epoch, start from 0
      - task(str): current task 'train', 'test', 'valid'
-     - n(int): count amount of sample learned
     Command can be triggered when running:
      - stop()
      - valid()
+     - restart()
     """
 
     def __init__(self):
@@ -1425,6 +1427,10 @@ class trainer(object):
     def valid(self):
         ''' Trigger validation immediatelly, asap '''
         self._valid_now = True
+
+    def restart(self):
+        ''' Trigger restart current process immediatelly '''
+        self._restart_now = Tru
 
     # ==================== Setter ==================== #
     def set_action(self, name, action,
@@ -1700,7 +1706,6 @@ class trainer(object):
         if validfreq < 1.0: # validate validfreq
             validfreq = int(max(validfreq * ntrain / batch, 1))
         train_cost = []
-
         # ====== start ====== #
         for i in xrange(epoch):
             self.epoch = i
