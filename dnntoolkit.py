@@ -1200,11 +1200,8 @@ class model(object):
         s += ' => Size: %.2f MB' % (nb_params * 4. / 1024. / 1024.) + '\n'
         # history
         self._check_current_working_history()
-        for i in self._history:
-            if i == self._working_history:
-                s += '* ' + str(i) + '\n'
-            else:
-                s += i + '\n'
+        s += str(self._working_history)
+
         # model function
         s += '======== Code ========\n'
         s += ' - api:%s' % self._api + '\n'
