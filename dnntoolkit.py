@@ -1010,22 +1010,25 @@ class model(object):
             logger.critical('*** creating network ... ***')
             self._model = func(**args)
 
-            if self._api == 'lasagne':
-                import lasagne
-                # load old weight
-                if len(self._weights) > 0:
-                    try:
+            # load old weight
+            if len(self._weights) > 0:
+                try:
+                    if self._api == 'lasagne':
+                        import lasagne
                         lasagne.layers.set_all_param_values(self._model, self._weights)
                         logger.critical('*** Successfully load old weights ***')
-                    except Exception, e:
-                        logger.critical('*** Cannot load old weights ***')
-                        logger.error(str(e))
-                        import traceback; traceback.print_exc();
-            else:
-                warnings.warn('NOT support API!', RuntimeWarning)
+                    else:
+                        warnings.warn('NOT support API!', RuntimeWarning)
+                except Exception, e:
+                    logger.critical('*** Cannot load old weights ***')
+                    logger.error(str(e))
+                    import traceback; traceback.print_exc();
         return self._model
 
     def pred(self, *X):
+        '''
+        Order of input will be keep in the same order when you create network
+        '''
         self.create_model()
 
         # ====== Create prediction function ====== #
