@@ -938,6 +938,7 @@ class model(object):
 
         # contain real model object
         self._model = None
+        self._pred = None
 
     # ==================== Model manager ==================== #
     def set_weights(self, weights):
