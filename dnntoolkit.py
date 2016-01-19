@@ -2366,7 +2366,8 @@ class _batch(object):
          function
         '''
         self._is_dataset_init()
-        self.set_normalizer(normalizer)
+        if normalizer is not None:
+            self.set_normalizer(normalizer)
         if batch_size == 'auto':
             batch_size = _auto_batch_size(self.shape)
 
