@@ -2631,7 +2631,7 @@ class dataset(object):
         else:
             for hdf in self._hdf:
                 s += '======== %s ========' % hdf.filename + '\n'
-                all_data = self._index.key() # faster
+                all_data = self._index.keys() # faster
                 all_data = [(d, str(hdf[d].shape), str(hdf[d].dtype)) for d in all_data]
                 for i in all_data:
                     s += ' - name:%-13s  shape:%-18s  dtype:%s' % i + '\n'
