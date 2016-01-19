@@ -1134,6 +1134,7 @@ class model(object):
                         self._model, deterministic=True),
                     allow_input_downcast=True,
                     on_unused_input=None)
+                logger.critical('*** Successfully create prediction function ***')
             else:
                 warnings.warn('NOT support API!', RuntimeWarning)
 
