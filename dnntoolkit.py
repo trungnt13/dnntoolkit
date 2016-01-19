@@ -2518,7 +2518,8 @@ class dataset(object):
 
         # ====== Multple files ====== #
         if self._write_mode is None:
-            warnings.warn('Have not set write mode, default is [last]', RuntimeWarning)
+            warnings.warn('Have not set write mode, default is [last]',
+                          RuntimeWarning)
             self._write_mode = 'last'
 
         if self._write_mode == 'last':
@@ -2631,7 +2632,7 @@ class dataset(object):
         else:
             for hdf in self._hdf:
                 s += '======== %s ========' % hdf.filename + '\n'
-                all_data = _hdf5_get_all_dataset(hdf)
+                all_data = self._index.key() # faster
                 all_data = [(d, str(hdf[d].shape), str(hdf[d].dtype)) for d in all_data]
                 for i in all_data:
                     s += ' - name:%-13s  shape:%-18s  dtype:%s' % i + '\n'
@@ -3277,16 +3278,14 @@ class speech():
     def __init__(self):
         super(speech, self).__init__()
 
-    # ======================================================================
-    # Predefined datasets information
-    # ======================================================================
+    # ==================== Predefined datasets information ==================== #
     nist15_cluster_lang = OrderedDict([
         ['ara', ['ara-arz', 'ara-acm', 'ara-apc', 'ara-ary', 'ara-arb']],
         ['zho', ['zho-yue', 'zho-cmn', 'zho-cdo', 'zho-wuu']],
         ['eng', ['eng-gbr', 'eng-usg', 'eng-sas']],
         ['fre', ['fre-waf', 'fre-hat']],
         ['qsl', ['qsl-pol', 'qsl-rus']],
-        ['spa', ['spa-car', 'spa-eur', 'spa-lac', 'spa-brz']]
+        ['spa', ['spa-car', 'spa-eur', 'spa-lac', 'por-brz']]
     ])
     nist15_lang_list = np.asarray([
         'ara-arz', 'ara-acm', 'ara-apc', 'ara-ary', 'ara-arb',
@@ -3294,14 +3293,14 @@ class speech():
         'eng-gbr', 'eng-usg', 'eng-sas',
         'fre-waf', 'fre-hat',
         'qsl-pol', 'qsl-rus',
-        'spa-car', 'spa-eur', 'spa-lac', 'spa-brz'])
+        'spa-car', 'spa-eur', 'spa-lac', 'por-brz'])
     nist15_within_cluster = {
         'ara-arz': 0, 'ara-acm': 1, 'ara-apc': 2, 'ara-ary': 3, 'ara-arb': 4,
         'zho-yue': 0, 'zho-cmn': 1, 'zho-cdo': 2, 'zho-wuu': 3,
         'eng-gbr': 0, 'eng-usg': 1, 'eng-sas': 2,
         'fre-waf': 0, 'fre-hat': 1,
         'qsl-pol': 0, 'qsl-rus': 1,
-        'spa-car': 0, 'spa-eur': 1, 'spa-lac': 2, 'spa-brz': 3
+        'spa-car': 0, 'spa-eur': 1, 'spa-lac': 2, 'por-brz': 3
     }
 
     @staticmethod
@@ -3317,27 +3316,28 @@ class speech():
 
     @staticmethod
     def nist15_label(label, lang=False, cluster=False, within_cluster=False):
-        label = label.replace('por-', 'spa-')
         rval = []
-        if lang:
+        if lang: # lang_id
             for i, j in enumerate(speech.nist15_lang_list):
                 if j in label:
                     rval.append(i)
-        if cluster:
+                    break
+        if cluster: # cluster_id
+            fixed_label = label.replace('por-', 'spa-')
             for i, j in enumerate(speech.nist15_cluster_lang.keys()):
-                if j in label:
+                if j in fixed_label:
                     rval.append(i)
-        if within_cluster:
+                    break
+        if within_cluster: # within_cluster_id
             for i in speech.nist15_within_cluster.keys():
                 if i in label:
                     rval.append(speech.nist15_within_cluster[i])
+                    break
         if len(rval) == 1:
             rval = rval[0]
         return rval
 
-    # ======================================================================
-    # Speech Signal Processing
-    # ======================================================================
+    # ==================== Speech Signal Processing ==================== #
     @staticmethod
     def read(f, pcm = False):
         '''
