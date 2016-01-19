@@ -709,6 +709,13 @@ class dnn():
             return 3
         return False
 
+    def calc_weights_decay(nb_params):
+        '''
+            10^{log10(1/sqrt(nb_params))}
+        '''
+        l2value = 10**np.floor(np.log10(1. / np.sqrt(nb_params)))
+        return l2value.astype(theano.config.floatX)
+
 # ===========================================================================
 # Model
 # ===========================================================================
