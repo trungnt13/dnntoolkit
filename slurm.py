@@ -79,6 +79,9 @@ def igpu(t=30, n=1, mem=15000):
     arch = 'gpu'
     if t <= 15:
         arch = 'gputest'
+    elif t > 4500:
+        arch = 'gpulong'
+        mem = int(min(mem, 20000))
 
     N = int(math.ceil(n / 2))
     if n > 1:
