@@ -1360,6 +1360,7 @@ class model(object):
 
     @staticmethod
     def load(path):
+        ''' Load won't create any modification to original AI file '''
         if not os.path.exists(path):
             m = model()
             m._save_path = path
