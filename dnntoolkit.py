@@ -1084,7 +1084,8 @@ class model(object):
                 try:
                     if self._api == 'lasagne':
                         import lasagne
-                        lasagne.layers.set_all_param_values(self._model, self._weights)
+                        lasagne.layers.set_all_param_values(self._model,
+                                                            self._weights)
                         logger.critical('*** Successfully load old weights ***')
                     else:
                         warnings.warn('NOT support API!', RuntimeWarning)
