@@ -3315,26 +3315,34 @@ class speech():
         return phonemes.index(p)
 
     @staticmethod
-    def nist15_label(label, lang=False, cluster=False, within_cluster=False):
+    def nist15_label(label):
+        '''
+        Return
+        ------
+        lang_id : int
+            idx in the list of 20 language
+        cluster_id : int
+            idx in the list of 6 clusters
+        within_cluster_id : int
+            idx in the list of each clusters
+        '''
         rval = []
-        if lang: # lang_id
-            for i, j in enumerate(speech.nist15_lang_list):
-                if j in label:
-                    rval.append(i)
-                    break
-        if cluster: # cluster_id
-            fixed_label = label.replace('por-', 'spa-')
-            for i, j in enumerate(speech.nist15_cluster_lang.keys()):
-                if j in fixed_label:
-                    rval.append(i)
-                    break
-        if within_cluster: # within_cluster_id
-            for i in speech.nist15_within_cluster.keys():
-                if i in label:
-                    rval.append(speech.nist15_within_cluster[i])
-                    break
-        if len(rval) == 1:
-            rval = rval[0]
+        # lang_id
+        for i, j in enumerate(speech.nist15_lang_list):
+            if j in label:
+                rval.append(i)
+                break
+        # cluster_id
+        fixed_label = label.replace('por-', 'spa-')
+        for i, j in enumerate(speech.nist15_cluster_lang.keys()):
+            if j in fixed_label:
+                rval.append(i)
+                break
+        # within_cluster_id
+        for i in speech.nist15_within_cluster.keys():
+            if i in label:
+                rval.append(speech.nist15_within_cluster[i])
+                break
         return rval
 
     # ==================== Speech Signal Processing ==================== #
