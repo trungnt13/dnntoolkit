@@ -155,7 +155,7 @@ class mpi():
         return div_processes, con_processes
 
     @staticmethod
-    def preprocess_mpi(jobs_list, features_func, save_func, n_cache=30):
+    def preprocess_mpi(jobs_list, features_func, save_func, n_cache=30, log_point=50):
         ''' Wrapped preprocessing procedure in MPI.
                     root
                 / / / | \ \ \
@@ -173,6 +173,8 @@ class mpi():
             transfer all data to process 0 as a list for saving to disk
         n_cache : int
             maximum number of cache for each process before gathering the data
+        log_point : int
+            after this amount of preprocessed data, print log
 
         Example
         -------
@@ -231,7 +233,7 @@ class mpi():
             if feature is not None:
                 data.append(feature)
 
-            if i % 50 == 0:
+            if i % log_point == 0:
                 logger.info('Rank:%d preprocessed %d files!' % (rank, i))
 
         all_data = comm.gather(data, root=0)
