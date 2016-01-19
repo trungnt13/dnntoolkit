@@ -3309,11 +3309,11 @@ class speech():
         Return
         ------
         lang_id : int
-            idx in the list of 20 language
+            idx in the list of 20 language, None if not found
         cluster_id : int
-            idx in the list of 6 clusters
+            idx in the list of 6 clusters, None if not found
         within_cluster_id : int
-            idx in the list of each clusters
+            idx in the list of each clusters, None if not found
         '''
         rval = [None, None, None]
         # lang_id
@@ -3327,6 +3327,8 @@ class speech():
             if j in fixed_label:
                 rval[1] = i
                 break
+        # special case for por cluster
+        if rval[1] is None and 'por' in fixed_label: rval[1] = 5
         # within_cluster_id
         for i in speech.nist15_within_cluster.keys():
             if i in label:
