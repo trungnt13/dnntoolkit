@@ -3288,11 +3288,17 @@ class speech():
         ['spa', ['spa-car', 'spa-eur', 'spa-lac', 'por-brz']]
     ])
     nist15_lang_list = np.asarray([
+        # Egyptian, Iraqi, Levantine, Maghrebi, Modern Standard
         'ara-arz', 'ara-acm', 'ara-apc', 'ara-ary', 'ara-arb',
+        # Cantonese, Mandarin, Min Dong, Wu
         'zho-yue', 'zho-cmn', 'zho-cdo', 'zho-wuu',
+        # British, American, South Asian (Indian)
         'eng-gbr', 'eng-usg', 'eng-sas',
+        # West african, Haitian
         'fre-waf', 'fre-hat',
+        # Polish, Russian
         'qsl-pol', 'qsl-rus',
+        # Caribbean, European, Latin American, Brazilian
         'spa-car', 'spa-eur', 'spa-lac', 'por-brz'])
     nist15_within_cluster = {
         'ara-arz': 0, 'ara-acm': 1, 'ara-apc': 2, 'ara-ary': 3, 'ara-arb': 4,
