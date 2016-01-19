@@ -1024,6 +1024,14 @@ class model(object):
                 logger.warning('Need support for new API %s' % self._api)
         return self._weights
 
+    def get_nweights(self):
+        ''' Return number of weights '''
+        n = 0
+        weights = self.get_weights()
+        for w in weights:
+            n += np.prod(w.shape)
+        return n
+
     # ==================== Network manipulation ==================== #
     def set_pred(self, pred_func):
         self._pred = pred_func
