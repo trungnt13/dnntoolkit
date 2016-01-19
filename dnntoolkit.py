@@ -3160,7 +3160,7 @@ class logger():
         p : number
             current progress value
         max_val : number
-            maximum value progress can reach
+            maximum value progress can reach (be equal)
         idx : anything
             identification of current progress, if 2 progress is diffrent, print
             newline to switch to print new progress
