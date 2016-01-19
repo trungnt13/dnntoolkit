@@ -709,6 +709,7 @@ class dnn():
             return 3
         return False
 
+    @staticmethod
     def calc_weights_decay(nb_params):
         '''
             10^{log10(1/sqrt(nb_params))}
