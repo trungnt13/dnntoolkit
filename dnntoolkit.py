@@ -2258,7 +2258,7 @@ class _batch(object):
         for i, j in batches:
             data = ds[i:j]
             prng2.shuffle(data) # this will slow thing a little bit
-            yield normalizer(data)
+            yield self._normalizer(data)
 
     def _iter_slow(self, batch_size=128, start=None, end=None,
         shuffle=True, seed=None, mode=0):
@@ -2322,7 +2322,7 @@ class _batch(object):
             batches = np.concatenate(
                 [all_ds[i][j[0]:j[1]] for i, j in _], axis=0)
             prng2.shuffle(batches)
-            yield normalizer(batches)
+            yield self._normalizer(batches)
 
     def iter(self, batch_size=128, start=None, end=None,
         shuffle=True, seed=None, normalizer=None, mode=0):
