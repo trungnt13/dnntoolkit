@@ -3304,17 +3304,6 @@ class speech():
     }
 
     @staticmethod
-    def timit_phonemes(p, map39=False):
-        ''' Mapping from 61 classes to 39 classes '''
-        phonemes = ['aa', 'ae', 'ah', 'ao', 'aw', 'ax', 'ax-h', 'axr', 'ay',
-            'b', 'bcl', 'ch', 'd', 'dcl', 'dh', 'dx', 'eh', 'el', 'em', 'en', 'eng',
-            'epi', 'er', 'ey', 'f', 'g', 'gcl', 'h#', 'hh', 'hv', 'ih', 'ix', 'iy',
-            'jh', 'k', 'kcl', 'l', 'm', 'n', 'ng', 'nx', 'ow', 'oy', 'p', 'pau',
-            'pcl', 'q', 'r', 's', 'sh', 't', 'tcl', 'th', 'uh', 'uw', 'ux', 'v',
-            'w', 'y', 'z', 'zh']
-        return phonemes.index(p)
-
-    @staticmethod
     def nist15_label(label):
         '''
         Return
@@ -3326,24 +3315,35 @@ class speech():
         within_cluster_id : int
             idx in the list of each clusters
         '''
-        rval = []
+        rval = [None, None, None]
         # lang_id
         for i, j in enumerate(speech.nist15_lang_list):
             if j in label:
-                rval.append(i)
+                rval[0] = i
                 break
         # cluster_id
         fixed_label = label.replace('por-', 'spa-')
         for i, j in enumerate(speech.nist15_cluster_lang.keys()):
             if j in fixed_label:
-                rval.append(i)
+                rval[1] = i
                 break
         # within_cluster_id
         for i in speech.nist15_within_cluster.keys():
             if i in label:
-                rval.append(speech.nist15_within_cluster[i])
+                rval[2] = speech.nist15_within_cluster[i]
                 break
         return rval
+
+    @staticmethod
+    def timit_phonemes(p, map39=False):
+        ''' Mapping from 61 classes to 39 classes '''
+        phonemes = ['aa', 'ae', 'ah', 'ao', 'aw', 'ax', 'ax-h', 'axr', 'ay',
+            'b', 'bcl', 'ch', 'd', 'dcl', 'dh', 'dx', 'eh', 'el', 'em', 'en', 'eng',
+            'epi', 'er', 'ey', 'f', 'g', 'gcl', 'h#', 'hh', 'hv', 'ih', 'ix', 'iy',
+            'jh', 'k', 'kcl', 'l', 'm', 'n', 'ng', 'nx', 'ow', 'oy', 'p', 'pau',
+            'pcl', 'q', 'r', 's', 'sh', 't', 'tcl', 'th', 'uh', 'uw', 'ux', 'v',
+            'w', 'y', 'z', 'zh']
+        return phonemes.index(p)
 
     # ==================== Speech Signal Processing ==================== #
     @staticmethod
