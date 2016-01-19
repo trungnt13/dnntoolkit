@@ -710,11 +710,12 @@ class dnn():
         return False
 
     @staticmethod
-    def calc_weights_decay(nb_params):
+    def calc_weights_decay(nb_params, maxval=0.1):
         '''
             10^{log10(1/sqrt(nb_params))}
         '''
-        l2value = 10**np.floor(np.log10(1. / np.sqrt(nb_params)))
+        l2value = min(10**np.floor(np.log10(1. / np.sqrt(nb_params))),
+                      maxval)
         return l2value.astype(theano.config.floatX)
 
 # ===========================================================================
@@ -2943,7 +2944,7 @@ class visual():
                     regular=regular, return_str=True)
             logger.log(s)
         except Exception, e:
-            logger.warning('print_bar: Error! Ignored! \n %s' % str(e))
+            logger.warning('print_bar: Ignored! Error:%s' % str(e))
 
     @staticmethod
     def print_scatter(x, y, size=None, pch="o", title=""):
@@ -2971,7 +2972,7 @@ class visual():
                 colour='default', title=title, return_str=True)
             logger.log(s)
         except Exception, e:
-            logger.warning('print_scatter Error! Ignored! \n %s' % str(e))
+            logger.warning('print_scatter: Ignored! Error:%s' % str(e))
 
     @staticmethod
     def print_hist(x, height=20.0, bincount=None, binwidth=None, pch="o",
@@ -3008,7 +3009,7 @@ class visual():
                     regular=regular, return_str=True)
             logger.log(s)
         except Exception, e:
-            logger.warning('print_hist Error! Ignored! \n %s' % str(e))
+            logger.warning('print_hist: Ignored! Error:%s' % str(e))
 
     @staticmethod
     def plot_hinton(matrix, max_weight=None, ax=None):
