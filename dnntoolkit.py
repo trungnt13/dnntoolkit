@@ -1295,7 +1295,6 @@ class model(object):
             logger.log(inspect.getsource(self._model_func))
 
     def __str__(self):
-        import inspect
         s = ''
         s += 'Model: %s' % self._save_path + '\n'
         # weight
@@ -1317,10 +1316,6 @@ class model(object):
         s += ' - name:%s' % self._model_name + '\n'
         s += ' - args:%s' % str(self._model_args) + '\n'
         s += ' - sandbox:%s' % str(self._sandbox) + '\n'
-        if self._model_func is not None:
-            s += ' - code:\n%s' % inspect.getsource(self._model_func.func_code) + '\n'
-        else:
-            s += ' - code:\n%s' % self._model_func + '\n'
         return s[:-1]
 
     # ==================== Load & Save ==================== #
