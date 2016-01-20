@@ -768,7 +768,7 @@ class _history(object):
     def merge(self, *history):
         h = _history()
         all_names = [self.name] + [i.name for i in history]
-        h._name = 'Merge:<' + ','.join(all_names) + '>'
+        h._name = 'Merge:<' + ','.join([str(i) for i in all_names]) + '>'
         data = []
         data += self._history
         for i in history:
