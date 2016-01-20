@@ -718,7 +718,7 @@ class dnn():
         '''
         l2value = min(10**np.floor(np.log10(1. / np.sqrt(nb_params))),
                       maxval)
-        return l2value.astype(theano.config.floatX)
+        return np.cast[theano.config.floatX](l2value)
 
 # ===========================================================================
 # Model
