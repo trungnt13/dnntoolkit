@@ -1430,8 +1430,10 @@ def _callback(trainer):
 def seed_generator(seed, size=30000):
     np.random.seed(seed)
     random_seed = np.random.randint(0, 10e8, size=size)
-    for i in xrange(size):
-        yield random_seed[i]
+    i = 0
+    while True:
+        yield random_seed[i % size]
+        i += 1
 
 def _parse_data_config(task, data):
     '''return train,valid,test'''
