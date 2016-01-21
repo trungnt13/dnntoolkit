@@ -1427,14 +1427,6 @@ class model(object):
 def _callback(trainer):
     pass
 
-def seed_generator(seed, size=30000):
-    np.random.seed(seed)
-    random_seed = np.random.randint(0, 10e8, size=size)
-    i = 0
-    while True:
-        yield random_seed[i % size]
-        i += 1
-
 def _parse_data_config(task, data):
     '''return train,valid,test'''
     train = None
@@ -1484,7 +1476,7 @@ class trainer(object):
 
     def __init__(self):
         super(trainer, self).__init__()
-        self._seed = seed_generator(MAGIC_SEED)
+        self._seed = RandomState(MAGIC_SEED)
         self._strategy = []
 
         self._train_data = None
@@ -1693,7 +1685,7 @@ class trainer(object):
                 if 'epoch' not in s: s['epoch'] = epoch
                 if 'shuffle' not in s: s['shuffle'] = shuffle
                 if 'data' not in s: s['data'] = data
-                if 'seed' in s: self._seed = seed_generator(seed)
+                if 'seed' in s: self._seed = RandomState(seed)
                 self._strategy.append(s)
             return
 
@@ -1709,7 +1701,7 @@ class trainer(object):
             'validfreq': validfreq
         })
         if seed is not None:
-            self._seed = seed_generator(seed)
+            self._seed = RandomState(seed)
         return self
 
     # ==================== Helper function ==================== #
@@ -1732,7 +1724,7 @@ class trainer(object):
         return tmp
 
     def _create_iter(self, names, batch, shuffle):
-        seed = self._seed.next()
+        seed = self._seed.randint(0, 10e8)
         data = [self._dataset[i].iter(batch, shuffle=shuffle, seed=seed) for i in names]
         return enumerate(zip(*data))
 
@@ -3057,6 +3049,11 @@ class visual():
         ax.autoscale_view()
         ax.invert_yaxis()
         return ax
+
+    @staticmethod
+    def plot_theano(var_or_func):
+        theano.printing.pydotprint(var_or_func, outfile = '/Users/trungnt13/tmp/tmp.png')
+        os.system('open -a /Applications/Preview.app /Users/trungnt13/tmp/tmp.png')
 
 class logger():
     _last_value = 0
