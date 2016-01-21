@@ -2472,7 +2472,8 @@ class dataset(object):
             self._hdf.append(f)
             ds = _hdf5_get_all_dataset(f)
             for i in ds:
-                if f[i].dtype == obj_type:
+                tmp = f[i]
+                if tmp.dtype == obj_type or len(tmp.shape) == 0:
                     self._object[i].append(f)
                 else:
                     self._index[i].append(f)
@@ -3357,16 +3358,45 @@ class speech():
                 break
         return rval
 
+    # ==================== Timit ==================== #
+    timit_61 = ['aa', 'ae', 'ah', 'ao', 'aw', 'ax', 'ax-h', 'axr', 'ay',
+        'b', 'bcl', 'ch', 'd', 'dcl', 'dh', 'dx', 'eh', 'el', 'em', 'en',
+        'eng', 'epi', 'er', 'ey', 'f', 'g', 'gcl', 'h#', 'hh', 'hv', 'ih',
+        'ix', 'iy', 'jh', 'k', 'kcl', 'l', 'm', 'n', 'ng', 'nx', 'ow',
+        'oy', 'p', 'pau', 'pcl', 'q', 'r', 's', 'sh', 't', 'tcl', 'th',
+        'uh', 'uw', 'ux', 'v', 'w', 'y', 'z', 'zh']
+    timit_39 = ['aa', 'ae', 'ah', 'aw', 'ay', 'b', 'ch', 'd',
+        'dh', 'dx', 'eh', 'er', 'ey', 'f', 'g', 'hh', 'ih', 'iy', 'jh', 'k',
+        'l', 'm', 'n', 'ng', 'ow', 'oy', 'p', 'r', 's', 'sh', 'sil', 't',
+        'th', 'uh', 'uw', 'v', 'w', 'y', 'z']
+    timit_map = {'ao': 'aa', 'ax': 'ah', 'ax-h': 'ah', 'axr': 'er',
+        'hv': 'hh', 'ix': 'ih', 'el': 'l', 'em': 'm',
+        'en': 'n', 'nx': 'n',
+        'eng': 'ng', 'zh': 'sh', 'ux': 'uw',
+        'pcl': 'sil', 'tcl': 'sil', 'kcl': 'sil', 'bcl': 'sil',
+        'dcl': 'sil', 'gcl': 'sil', 'h#': 'sil', 'pau': 'sil', 'epi': 'sil'}
+
     @staticmethod
-    def timit_phonemes(p, map39=False):
-        ''' Mapping from 61 classes to 39 classes '''
-        phonemes = ['aa', 'ae', 'ah', 'ao', 'aw', 'ax', 'ax-h', 'axr', 'ay',
-            'b', 'bcl', 'ch', 'd', 'dcl', 'dh', 'dx', 'eh', 'el', 'em', 'en', 'eng',
-            'epi', 'er', 'ey', 'f', 'g', 'gcl', 'h#', 'hh', 'hv', 'ih', 'ix', 'iy',
-            'jh', 'k', 'kcl', 'l', 'm', 'n', 'ng', 'nx', 'ow', 'oy', 'p', 'pau',
-            'pcl', 'q', 'r', 's', 'sh', 't', 'tcl', 'th', 'uh', 'uw', 'ux', 'v',
-            'w', 'y', 'z', 'zh']
-        return phonemes.index(p)
+    def timit_phonemes(phn, map39=False, blank=False):
+        ''' Included blank '''
+        if type(phn) not in (list, tuple, np.ndarray):
+            phn = [phn]
+        if map39:
+            timit = speech.timit_39
+            timit_map = speech.timit_map
+            l = 39
+        else:
+            timit = speech.timit_61
+            timit_map = {}
+            l = 61
+
+        rphn = []
+        for p in phn:
+            if p not in timit_map and p not in timit:
+                if blank: rphn.append(l)
+            else:
+                rphn.append(timit.index(timit_map[p]) if p in timit_map else timit.index(p))
+        return rphn
 
     # ==================== Speech Signal Processing ==================== #
     @staticmethod
@@ -3548,8 +3578,6 @@ class speech():
                         get_spec=True, get_mspec=False)
         spt = spt[2]
         spt = spt.astype(np.float32)
-        # spt = np.clip(spt, np.percentile(spt, 0.01),
-                      # np.percentile(spt, 0.99))
 
         #####################################
         # 5. Vad and normalize.
