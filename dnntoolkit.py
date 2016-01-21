@@ -1880,6 +1880,9 @@ class trainer(object):
         # end training
         return self._finish_train(train_cost, self._early_restart())
 
+    def debug(self):
+        raise NotImplementedError()
+
     def run(self):
         ''' run specified strategies
         Returns
@@ -2633,7 +2636,13 @@ class dataset(object):
         else:
             for hdf in self._hdf:
                 s += '======== %s ========' % hdf.filename + '\n'
+                s += '*** Array ***\n'
                 all_data = self._index.keys() # faster
+                all_data = [(d, str(hdf[d].shape), str(hdf[d].dtype)) for d in all_data]
+                for i in all_data:
+                    s += ' - name:%-13s  shape:%-18s  dtype:%s' % i + '\n'
+                s += '*** Objects ***\n'
+                all_data = self._object.keys() # faster
                 all_data = [(d, str(hdf[d].shape), str(hdf[d].dtype)) for d in all_data]
                 for i in all_data:
                     s += ' - name:%-13s  shape:%-18s  dtype:%s' % i + '\n'
