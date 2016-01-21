@@ -87,7 +87,9 @@ def igpu(t=30, n=1, mem=15000):
     if n > 1:
         n = 2
 
-    os.system('srun -N %d -p %s -t %d --gres=gpu:%d --mem=%d --pty $SHELL -l' % (N, arch, t, n, mem))
+    command = 'srun -N %d -p %s -t %d --gres=gpu:%d --mem=%d --pty $SHELL -l' % (N, arch, t, n, mem)
+    print(command)
+    os.system(command)
 
 def icpu(t=30, n=8, mem=16000):
     N = int(math.ceil(n / 16))
@@ -97,7 +99,10 @@ def icpu(t=30, n=8, mem=16000):
     elif N > 1:
         arch = 'parallel'
     mem = mem / n
-    os.system('srun -N %d --ntasks=%d -p %s -t %d --mem=%d --pty $SHELL -l' % (N, n, arch, t, mem))
+
+    command = 'srun -N %d --ntasks=%d -p %s -t %d --mem=%d --pty $SHELL -l' % (N, n, arch, t, mem)
+    print(command)
+    os.system(command)
 
 # ======================================================================
 # SLURM creator
