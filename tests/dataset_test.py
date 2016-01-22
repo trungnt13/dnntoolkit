@@ -15,128 +15,175 @@ import dnntoolkit
 import time
 
 from itertools import izip
+import h5py
+import unittest
 # ======================================================================
 # Run batch test first
 # ======================================================================
-# os.system('python batch_test.py')
+def generateData():
+    f = h5py.File('tmp/tmp1.h5', 'w')
+    f['X1'] = np.zeros((100, 1)) + 1
+    f['Y1'] = np.zeros((100, 1)) - 1
 
-# ======================================================================
-# Single file
-# ======================================================================
-print()
-print('***********************************************')
-print('************ Single: Writing test! ************')
-print('***********************************************')
-ds = dnntoolkit.dataset('tmp.hdf', mode='w')
-ds['X'].append(np.tile(np.arange(50)[:, None], (1, 3)))
-ds['y'] = np.arange(50)[:, None]
-print(ds)
-ds.close()
+    f['X3'] = np.arange(100)[:, None]
+    f['Y4'] = -np.arange(100, 200)[:, None]
 
-print()
-print('***********************************************')
-print('************ Single: Reading test! ************')
-print('***********************************************')
-ds = dnntoolkit.dataset('tmp.hdf', mode='r')
-print('Access all value:', np.sum(ds['X'][:] - ds['y'][:])) #return 0
+    f['X5'] = np.arange(100).reshape(-1, 2)
 
-result = []
-X = ds['X'].iter(5, start=0.0, end=1.0, shuffle=True)
-y = ds['y'].iter(5, start=0.0, end=1.0, shuffle=True)
-for i, j in izip(X, y):
-    result.append(np.sum(i - j))
+    f['a'] = '111'
+    f['c'] = np.array([['a', 'b'], ['c', 'd']])
+    f.close()
+    f = h5py.File('tmp/tmp2.h5', 'w')
+    f['X1'] = np.zeros((100, 1)) + 1
+    f['X2'] = np.zeros((200, 1)) + 2
+    f['Y2'] = np.zeros((200, 1)) - 2
 
-X = ds['X'].iter(5, start=0.5, end=0.1, shuffle=True)
-y = ds['y'].iter(5, start=0.5, end=0.1, shuffle=True)
-for i, j in izip(X, y):
-    result.append(np.sum(i - j))
+    f['Y3'] = -np.arange(100)[:, None]
+    f['X4'] = np.arange(100, 200)[:, None]
 
-X = ds['X'].iter(5, start=0.1, end=0.8, shuffle=False)
-y = ds['y'].iter(5, start=0.1, end=0.8, shuffle=False)
-for i, j in izip(X, y):
-    result.append(np.sum(i - j))
+    f['X5'] = np.arange(100, 200).reshape(-1, 2)
 
-print('All results:')
-print(result)
-ds.close()
+    f['Y'] = np.asarray([-1] * 100 + [-2] * 200)[:, None]
+    f['a'] = '222'
+    f['b'] = 'bbb'
+    f.close()
 
-# ======================================================================
-# Multiple files
-# ======================================================================
-print()
-print('*************************************************')
-print('************ Multiple: Reading test! ************')
-print('*************************************************')
-ds = dnntoolkit.dataset(['tmp1.hdf', 'tmp2.hdf'], mode='r')
-print(ds)
-# access instance object
-print(ds['a'])
-print(ds['a', 'b'])
-print(ds['c'])
-# access array
-print(ds['c'][:])
-print(ds['X1'])
-print(ds['X1', 'X3'])
-print(ds['Y1', 'Y3'])
-print('All values:', np.sum(ds['X1', 'X3'][:] + ds['Y1', 'Y3'][:])) # return 0
+def cleanUp():
+    try:
+        os.remove('tmp/tmp1.h5')
+        os.remove('tmp/tmp2.h5')
+    except:
+        pass
 
-result = []
-X = ds['X1', 'X3'].iter(3, shuffle = True, mode = 0)
-y = ds['Y1', 'Y3'].iter(3, shuffle = True, mode = 0)
-for i, j in izip(X, y):
-    result.append(np.sum(i + j)) # perfect fit would print 0
+class BatchTest(unittest.TestCase):
 
-X = ds['X1', 'X3'].iter(3, shuffle = True, mode = 1)
-y = ds['Y1', 'Y3'].iter(3, shuffle = True, mode = 1)
-for i, j in izip(X, y):
-    result.append(np.sum(i + j)) # perfect fit would print 0
+    def setUp(self):
+        self.f1 = h5py.File('tmp/tmp1.h5', 'r')
+        self.f2 = h5py.File('tmp/tmp2.h5', 'r')
 
-X = ds['X1', 'X3'].iter(3, shuffle = True, mode = 2)
-y = ds['Y1', 'Y3'].iter(3, shuffle = True, mode = 2)
-for i, j in izip(X, y):
-    result.append(np.sum(i + j)) # perfect fit would print 0
+        self.X = dnntoolkit.batch(['X1', 'X2'], [self.f1, self.f2]) # n_X1=200; n_X2=200
+        self.y = dnntoolkit.batch(['Y1', 'Y2'], [self.f1, self.f2]) # n_Y1=200; n_X2=200
+        self.y1 = dnntoolkit.batch(['Y'], [self.f2])
 
-X = ds['X1', 'X3'].iter(3, start=0.1, end=0.4, shuffle = True, mode = 0)
-y = ds['Y1', 'Y3'].iter(3, start=0.1, end=0.4, shuffle = True, mode = 0)
-for i, j in izip(X, y):
-    result.append(np.sum(i + j)) # perfect fit would print 0
+        self.X34 = dnntoolkit.batch(['X3', 'X4'], [self.f1, self.f2])
+        self.y34 = dnntoolkit.batch(['Y3', 'Y4'], [self.f2, self.f1])
 
-X = ds['X1', 'X3'].iter(3, start=0.1, end=0.4, shuffle = True, mode = 1)
-y = ds['Y1', 'Y3'].iter(3, start=0.1, end=0.4, shuffle = True, mode = 1)
-for i, j in izip(X, y):
-    result.append(np.sum(i + j)) # perfect fit would print 0
+        self.X12 = dnntoolkit.batch(['X1', 'X2'], [self.f1, self.f2])
+        self.Y = dnntoolkit.batch('Y', self.f2)
 
-X = ds['X1', 'X3'].iter(3, start=0.1, end=0.4, shuffle = True, mode = 2)
-y = ds['Y1', 'Y3'].iter(3, start=0.1, end=0.4, shuffle = True, mode = 2)
-for i, j in izip(X, y):
-    result.append(np.sum(i + j)) # perfect fit would print 0
+    def tearDown(self):
+        self.f1.close()
+        self.f2.close()
 
-print('All result:')
-print(result)
-ds.close()
+    def test_cross_iter_2_hdf(self):
+        start, end = np.random.rand(1)[0] / 2, np.random.rand(1)[0] / 2 + 0.5
+        seed = 13
+        for shuffle in (True, False):
+            for mode in (0, 1, 2):
+                X_ = np.concatenate(list(self.X34.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                seed=seed, normalizer=None, mode=mode)), 0)
+                y_ = np.concatenate(list(self.y34.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                seed=seed, normalizer=None, mode=mode)), 0)
+                self.assertEqual(np.sum(X_ + y_), 0.,
+                    'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
+        for shuffle in (True, False):
+            for mode in (0, 1, 2):
+                X_ = np.concatenate(list(self.X.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                seed=seed, normalizer=None, mode=mode)), 0)
+                y_ = np.concatenate(list(self.y.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                seed=seed, normalizer=None, mode=mode)), 0)
+                self.assertEqual(np.sum(X_ + y_), 0.,
+                    'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
 
-print()
-print('*************************************************')
-print('************ Multiple: Writing test! ************')
-print('*************************************************')
-ds = dnntoolkit.dataset(['tmp3.hdf', 'tmp4.hdf'], mode='w')
-print(ds)
-ds['X4'] = np.zeros((10, 1)) + 4
+        start, end = 0., 1. # this one only support full dataset
+        for shuffle in (False, ):
+            for mode in (0, 2):
+                X_ = np.concatenate(list(self.X12.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                seed=seed, normalizer=None, mode=mode)), 0)
+                y_ = np.concatenate(list(self.Y.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                seed=seed, normalizer=None, mode=mode)), 0)
+                self.assertEqual(np.sum(X_ + y_), 0.,
+                    'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
 
-ds.set_write('all')
-ds['X1'] = np.zeros((10, 1)) + 1
+    def test_indexing(self):
+        self.assertEqual(self.X34[:].ravel().tolist(), range(200))
+        self.assertEqual(self.y34[:].ravel().tolist(), [-i for i in range(200)])
 
-ds.set_write('tmp3.hdf')
-ds['X3'] = np.zeros((10, 1)) + 3
+    def test_arithmetic(self):
+        X5 = dnntoolkit.batch(['X5', 'X5'], [self.f1, self.f2])
+        X = np.concatenate(
+            (np.arange(100).reshape(-1, 2), np.arange(100, 200).reshape(-1, 2)), 0)
+        self.assertEqual(X5.sum(0).tolist(), X.sum(0).tolist())
+        self.assertEqual(X5.sum2(0).tolist(), np.power(X, 2).sum(0).tolist())
+        self.assertEqual(X5.mean(0).tolist(), X.mean(0).tolist())
+        self.assertEqual(X5.var(0).tolist(), X.var(0).tolist())
 
-ds.set_write(slice(None, None))
-ds['all'] = 'hello'
+        self.assertEqual(X5.sum(1).tolist(), X.sum(1).tolist())
+        self.assertEqual(X5.sum2(1).tolist(), np.power(X, 2).sum(1).tolist())
+        self.assertEqual(X5.mean(1).tolist(), X.mean(1).tolist())
+        self.assertEqual(X5.var(1).tolist(), X.var(1).tolist())
 
-ds.set_write(1)
-ds['X4+1'] = np.zeros((10, 1)) + 5
+    def test_double_iteration(self):
+        X12 = dnntoolkit.batch(['X1', 'X2'], [self.f1, self.f2])
+        Y12 = dnntoolkit.batch('Y', self.f2)
+        x = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=False, mode=0)), 0).ravel()
+        y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=False, mode=0)), 0).ravel()
+        self.assertEqual(np.sum(x + y), 0)
+        x = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=True, mode=0)), 0).ravel()
+        y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=True, mode=0)), 0).ravel()
+        self.assertEqual(np.sum(x + y), 0)
+        x = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=True, mode=2)), 0).ravel()
+        y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=True, mode=2)), 0).ravel()
+        self.assertEqual(np.sum(x + y), 0)
+        x = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=True, mode=0)), 0).ravel()
+        y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=True, mode=0)), 0).ravel()
+        self.assertEqual(np.sum(x + y), 0)
 
-ds.set_write(['tmp3.hdf', 'tmp4.hdf'])
-ds['X3+4'] = np.zeros((10, 1)) + 7
+    def test_single_iteration(self):
+        l = np.concatenate(list(self.X34.iter(batch_size=9, mode=0, shuffle=False)), 0)
+        self.assertEqual(l.ravel().tolist(), range(200))
 
-print(ds)
-ds.close()
+        l = np.concatenate(
+            list(self.X34.iter(batch_size=9, mode=0, shuffle=False, start=0., end=0.5)), 0)
+        self.assertEqual(l.ravel().tolist(), range(50) + range(100, 150))
+
+        l = np.concatenate(
+            list(self.X34.iter(batch_size=9, mode=0, shuffle=False, start=0.5, end=0.8)), 0)
+        self.assertEqual(l.ravel().tolist(), range(50, 80) + range(150, 180))
+
+        l = np.concatenate(
+            list(self.X34.iter(batch_size=9, mode=0, shuffle=True, start=0.8, end=0.5)), 0)
+        self.assertEqual(sorted(l.ravel().tolist()), range(50, 80) + range(150, 180))
+
+        # ====== Mode=2 ====== #
+        l = np.concatenate(
+            list(self.X34.iter(batch_size=9, mode=2, shuffle=True, start=0.5, end=0.8)), 0)
+        self.assertEqual(sorted(l.ravel().tolist()), range(50, 80) + range(150, 180))
+
+        l = np.concatenate(
+            list(self.X34.iter(batch_size=9, mode=2, shuffle=False, start=0.5, end=0.8)), 0)
+        self.assertEqual(sorted(l.ravel().tolist()), range(50, 80) + range(150, 180))
+
+class DatasetTest(unittest.TestCase):
+    def setUp(self):
+        self.f1 = h5py.File('tmp/tmp1.h5', 'r')
+        self.f2 = h5py.File('tmp/tmp2.h5', 'r')
+
+    def tearDown(self):
+        self.f1.close()
+        self.f2.close()
+
+    def test_(self):
+        pass
+
+# ===========================================================================
+# Main
+# ===========================================================================
+if __name__ == '__main__':
+    try:
+        generateData()
+        unittest.main()
+    except:
+        pass
+    finally:
+        cleanUp()

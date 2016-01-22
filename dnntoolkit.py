@@ -2035,11 +2035,15 @@ def create_batch(n_samples, batch_size, start=None, end=None, prng=None, upsampl
     '''
     Parameters
     ----------
+    n_samples : int
+        size of original full dataset (not count start and end)
     prng : numpy.random.RandomState
         if prng != None, the upsampling process will be randomized
     upsample : int
         upsample > n_samples, batch will be sampled from original data to make
         the same total number of sample
+        if [start] and [end] are specified, upsample will be rescaled according
+        to original n_samples
 
     Example
     -------
@@ -2062,17 +2066,24 @@ def create_batch(n_samples, batch_size, start=None, end=None, prng=None, upsampl
     # 1. Validate arguments.
     if start is None or start >= n_samples or start < 0:
         start = 0
-    if end is None or end < start or end > n_samples:
+    if end is None or end > n_samples:
         end = n_samples
+    if end < start: #swap
+        tmp = start
+        start = end
+        end = tmp
+
     if start < 1.0:
         start = int(start * n_samples)
     if end <= 1.0:
         end = int(end * n_samples)
+    orig_n_samples = n_samples
     n_samples = end - start
 
     if upsample is None or upsample < n_samples:
         upsample = n_samples
-
+    else:
+        upsample = int(upsample * float(n_samples) / orig_n_samples) # rescale
     #####################################
     # 2. Init.
     idx = range(start, end)
@@ -2139,12 +2150,19 @@ class _dummy_shuffle():
     def shuffle(x):
         pass
 
-class _batch(object):
+class batch(object):
 
-    """docstring for _batch"""
+    """Batch object
+    Parameters
+    ----------
+    key : str, list(str)
+        list of dataset key in h5py file
+    hdf : h5py.File
+        a h5py.File or list of h5py.File
+    """
 
     def __init__(self, key, hdf):
-        super(_batch, self).__init__()
+        super(batch, self).__init__()
         if type(key) not in (tuple, list):
             key = [key]
         if type(hdf) not in (tuple, list):
@@ -2351,10 +2369,10 @@ class _batch(object):
             s = sum(all_size)
             all_batch_size = \
                 [int(math.ceil(batch_size * float(i / s))) for i in all_size]
-            all_upsample = all_size
+            all_upsample = [None] * len(all_size)
         else:
             all_batch_size = [batch_size for i in xrange(n_dataset)]
-            all_upsample = all_size
+            all_upsample = [None] * len(all_size)
 
         # ====== Create all block and batches ====== #
         # [ ((idx1, batch1), (idx2, batch2), ...), # batch 1
@@ -2393,6 +2411,7 @@ class _batch(object):
     def iter(self, batch_size=128, start=None, end=None,
         shuffle=True, seed=None, normalizer=None, mode=0):
         ''' Create iteration for all dataset contained in this _batch
+        When [start] and [end] are given, it mean appying for each dataset
 
         Parameters
         ----------
@@ -2620,11 +2639,14 @@ class dataset(object):
 
         if idx in self._datamap:
             return self._datamap[idx]
-        batch = _batch(keys, ret)
-        self._datamap[idx] = batch
-        return batch
+        b = batch(keys, ret)
+        self._datamap[idx] = b
+        return b
 
     def __setitem__(self, key, value):
+        ''' Logic of this function:
+         - pass
+        '''
         # check input
         if self._mode == 'r':
             raise RuntimeError('No write is allowed in read mode')
