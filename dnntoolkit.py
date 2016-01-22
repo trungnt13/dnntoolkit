@@ -1118,8 +1118,14 @@ class model(object):
         self._model_args = kwargs
         self._model_name = model.func_name
 
-    def create_model(self):
+    def create_model(self, checkpoint=True):
         '''
+        Parameters
+        ----------
+        checkpoint: bool
+            if True, not only create new model but also create a saved
+            checkpoint if NO weights have setted
+
         Notes
         -----
         The logic of this method is:
@@ -1152,7 +1158,7 @@ class model(object):
             # fetch new weights into model,  create checkpoints
             else:
                 weights = self.get_weights()
-                if self._save_path is not None:
+                if self._save_path is not None and checkpoint:
                     f = h5py.File(self._save_path, mode='a')
                     try:
                         if 'nb_weights' in f: del f['nb_weights']
