@@ -1119,6 +1119,14 @@ class model(object):
         self._model_name = model.func_name
 
     def create_model(self):
+        '''
+        Notes
+        -----
+        The logic of this method is:
+         - if already set_weights, old weights will be loaded into new model
+         - if NO setted weights and new model creates, fetch all models weights
+         and save it to file to create checkpoint of save_path available
+        '''
         if self._model_func is None:
             raise ValueError("You must save_model first")
         if self._model is None:
@@ -1141,9 +1149,20 @@ class model(object):
                     logger.critical('*** Cannot load old weights ***')
                     logger.error(str(e))
                     import traceback; traceback.print_exc();
-            # fetch new weights into model
+            # fetch new weights into model,  create checkpoints
             else:
-                self.get_weights()
+                weights = self.get_weights()
+                if self._save_path is not None:
+                    f = h5py.File(self._save_path, mode='a')
+                    try:
+                        if 'nb_weights' in f: del f['nb_weights']
+                        f['nb_weights'] = len(weights)
+                        for i, w in enumerate(weights):
+                            if 'weight_%d' % i in f: del f['weight_%d' % i]
+                            f['weight_%d' % i] = w
+                    except:
+                        print('shit')
+                    f.close()
         return self._model
 
     def pred(self, *X):
@@ -1196,8 +1215,8 @@ class model(object):
             f = h5py.File(self._save_path, 'r')
 
             # rollback weights
-            self._weights = []
             if 'nb_weights' in f:
+                self._weights = []
                 for i in xrange(f['nb_weights'].value):
                     self._weights.append(f['weight_%d' % i].value)
             if self._model is not None:
@@ -1213,9 +1232,7 @@ class model(object):
             if 'history' in f:
                 self._history = cPickle.loads(f['history'].value)
                 logger.critical(' *** History rolled-back! ***')
-            else:
-                self._history = []
-            self._history_updated = True
+                self._history_updated = True
         else:
             logger.warning('No checkpoint found! Ignored rollback!')
         return self
