@@ -720,11 +720,21 @@ class dnn():
         return False
 
     @staticmethod
-    def calc_weights_decay(nb_params, maxval=0.1):
+    def calc_weights_decay(nparams, maxval=0.1):
         '''
-            10^{log10(1/sqrt(nb_params))}
+            10^{log10(1/sqrt(nparams))}
         '''
-        l2value = min(10**np.floor(np.log10(1. / np.sqrt(nb_params))),
+        l2value = min(10**np.log10(1. / np.sqrt(nparams)),
+                      maxval)
+        return np.cast[theano.config.floatX](l2value / 2)
+
+    @staticmethod
+    def calc_lr(nparams, nlayers, maxval=0.1):
+        '''
+            10^{log10(1/sqrt(nparams))}
+        '''
+        nparams *= np.sqrt(nlayers)
+        l2value = min(10**np.log10(1. / np.sqrt(nparams)),
                       maxval)
         return np.cast[theano.config.floatX](l2value)
 
@@ -1050,6 +1060,17 @@ class model(object):
         for w in weights:
             n += np.prod(w.shape)
         return n
+
+    def get_nlayers(self):
+        ''' Return number of layers (only layers with trainable params) '''
+        if self._model is not None:
+            if self._api == 'lasagne':
+                import lasagne
+                return len([i for i in lasagne.layers.get_all_layers(self._model)
+                            if len(i.get_params(trainable=True)) > 0])
+            else:
+                logger.warning('Need support for new API %s' % self._api)
+        return 0
 
     # ==================== Network manipulation ==================== #
     def set_pred(self, pred_func):
