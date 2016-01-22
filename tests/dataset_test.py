@@ -165,17 +165,26 @@ class BatchTest(unittest.TestCase):
         self.assertEqual(sorted(l.ravel().tolist()), range(50, 80) + range(150, 180))
 
 class DatasetTest(unittest.TestCase):
+
     def setUp(self):
-        self.f1 = h5py.File('tmp/tmp1.h5', 'r')
-        self.f2 = h5py.File('tmp/tmp2.h5', 'r')
+        self.ds = dnntoolkit.dataset(['tmp/tmp1.h5', 'tmp/tmp2.h5'], mode='r')
 
     def tearDown(self):
-        self.f1.close()
-        self.f2.close()
+        self.ds.close()
 
-    def test_(self):
-        pass
+    def test_print(self):
+        print()
+        print(self.ds)
 
+    def test_indexing(self):
+        b = self.ds['X1', 'X2']
+
+        self.assertEqual(tuple(b._key), ('X1', 'X1', 'X2'))
+        self.assertEqual(b._hdf[0].filename, 'tmp/tmp1.h5')
+        self.assertEqual(b._hdf[1].filename, 'tmp/tmp2.h5')
+        self.assertEqual(b._hdf[2].filename, 'tmp/tmp2.h5')
+
+        self.assertEqual(tuple(self.ds['a']), ('111', '222'))
 # ===========================================================================
 # Main
 # ===========================================================================

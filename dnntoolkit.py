@@ -2614,10 +2614,23 @@ class dataset(object):
             return hdf
 
     def __getitem__(self, key):
+        ''' Logic of this function:
+         - Object is returned directly, even though key is mixture of object
+         and array, only return objects
+         - key is always processed as an array
+         - Find as much as possible all hdf contain the key
+         Example
+         -------
+         hdf1: a, b, c
+         hdf2: a, b
+         hdf3: a
+         ==> key = a return [hdf1, hdf2, hdf3]
+         ==> key = (a,b) return [hdf1, hdf2, hdf3, hdf1, hdf2]
+        '''
         if type(key) not in (tuple, list):
             key = [key]
 
-        # ====== Return object ====== #
+        # ====== Return object is priority ====== #
         ret = []
         for k in key:
             if k in self._object:
@@ -2645,7 +2658,11 @@ class dataset(object):
 
     def __setitem__(self, key, value):
         ''' Logic of this function:
-         - pass
+         - If mode is 'r': NO write => error
+         - if object, write the object directly
+         - mode=all: write to all hdf
+         - mode=last: write to the last one
+         - mode=slice: write to selected
         '''
         # check input
         if self._mode == 'r':
@@ -2701,18 +2718,20 @@ class dataset(object):
         if self._isclose:
             s += '******** Closed ********\n'
         else:
-            for hdf in self._hdf:
-                s += '======== %s ========' % hdf.filename + '\n'
-                s += '*** Array ***\n'
-                all_data = self._index.keys() # faster
-                all_data = [(d, str(hdf[d].shape), str(hdf[d].dtype)) for d in all_data]
-                for i in all_data:
-                    s += ' - name:%-13s  shape:%-18s  dtype:%s' % i + '\n'
-                s += '*** Objects ***\n'
-                all_data = self._object.keys() # faster
-                all_data = [(d, str(hdf[d].shape), str(hdf[d].dtype)) for d in all_data]
-                for i in all_data:
-                    s += ' - name:%-13s  shape:%-18s  dtype:%s' % i + '\n'
+            s += '******** Array ********\n'
+            all_data = self._index.keys() # faster
+            for i in all_data:
+                all_hdf = self._index[i]
+                for j in all_hdf:
+                    s += ' - name:%-13s  shape:%-18s  dtype:%-8s  hdf:%s' % \
+                        (i, j[i].shape, j[i].dtype, j.filename) + '\n'
+            s += '******** Objects ********\n'
+            all_data = self._object.keys() # faster
+            for i in all_data:
+                all_hdf = self._object[i]
+                for j in all_hdf:
+                    s += ' - name:%-13s  shape:%-18s  dtype:%-8s  hdf:%s' % \
+                        (i, j[i].shape, j[i].dtype, j.filename) + '\n'
         return s[:-1]
 
     # ==================== Static loading ==================== #
