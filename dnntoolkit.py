@@ -2176,6 +2176,10 @@ class _dummy_shuffle():
     def shuffle(x):
         pass
 
+    @staticmethod
+    def permutation(x):
+        return np.arange(x)
+
 class batch(object):
 
     """Batch object
@@ -2420,10 +2424,8 @@ class batch(object):
         batches = create_batch(ds.shape[0], batch_size,
             start, end, prng1)
         prng2.shuffle(batches)
-
         for i, j in batches:
-            data = ds[i:j]
-            prng2.shuffle(data) # this will slow thing a little bit
+            data = ds[i:j][prng2.permutation(j - i)]
             yield self._normalizer(data)
 
     def _iter_slow(self, batch_size=128, start=None, end=None,
@@ -2453,8 +2455,9 @@ class batch(object):
                 [int(math.ceil(batch_size * float(i / s))) for i in all_size]
             all_upsample = [None] * len(all_size)
         else:
-            all_batch_size = [batch_size for i in xrange(n_dataset)]
-            all_upsample = [None] * len(all_size)
+            all_batch_size = [batch_size]
+            all_upsample = [None]
+            all_size = [sum(all_size)]
 
         # ====== Create all block and batches ====== #
         # [ ((idx1, batch1), (idx2, batch2), ...), # batch 1
@@ -2472,11 +2475,25 @@ class batch(object):
             for i in zip_longest(*tmp_block_batch):
                 all_block_batch.append([(k, v) for k, v in enumerate(i) if v is not None])
         else:
-            for i, batches in enumerate(tmp_block_batch):
-                for b in batches:
-                    all_block_batch.append( # i=dataset_idx; b=(batches)
-                        [(i, b)]
-                    )
+            all_size = [i.shape[0] for i in all_ds]
+            all_idx = []
+            for i, j in enumerate(all_size):
+                all_idx += [(i, k) for k in xrange(j)] # (ds_idx, index)
+            all_idx = [all_idx[i[0]:i[1]] for i in tmp_block_batch[0]]
+            # complex algorithm to connecting the batch with different dataset
+            for i in all_idx:
+                tmp = []
+                idx = i[0][0] # i[0][0]: ds_index
+                start = i[0][1] # i[0][1]: index
+                end = start
+                for j in i[1:]: # detect change in index
+                    if idx != j[0]:
+                        tmp.append((idx, (start, end + 1)))
+                        idx = j[0]
+                        start = j[1]
+                    end = j[1]
+                tmp.append((idx, (start, end + 1)))
+                all_block_batch.append(tmp)
         prng2.shuffle(all_block_batch)
         # print if you want debug
         # for _ in all_block_batch:
@@ -2487,14 +2504,14 @@ class batch(object):
         for _ in all_block_batch: # each _ is a block
             batches = np.concatenate(
                 [all_ds[i][j[0]:j[1]] for i, j in _], axis=0)
-            prng2.shuffle(batches)
+            batches = batches[prng2.permutation(batches.shape[0])]
             yield self._normalizer(batches)
 
     def iter(self, batch_size=128, start=None, end=None,
         shuffle=True, seed=None, normalizer=None, mode=0):
         ''' Create iteration for all dataset contained in this _batch
         When [start] and [end] are given, it mean appying for each dataset
-
+        If the amount of data between [start] and [end] < 1.0
         Parameters
         ----------
         batch_size : int, 'auto'
@@ -2524,13 +2541,18 @@ class batch(object):
 
         Notes
         -----
-        This method is thread-safe, as it uses private instance of RandomState,
-        the order will be preserved if using iter in multi thread.
+        This method is thread-safe, as it uses private instance of RandomState.
         To create consistent permutation of shuffled dataset, you must:
          - both batch have the same number and order of dataset
          - using the same seed and mode when calling iter()
-         Hint: small level of batch shuffle can be obtained by using normalizer
-         function
+        Hint: small level of batch shuffle can be obtained by using normalizer
+        function
+        The only case that 2 [dnntoolkit.batch] have the same order is when
+        mode=0 and shuffle=False, for example
+        >>> X = batch(['X1','X2], [f1, f2])
+        >>> y = batch('Y', f)
+        >>> X.iter(512, mode=0, shuffle=False) have the same order with
+            y.iter(512, mode=0, shuffle=False)
         '''
         self._is_dataset_init()
         if normalizer is not None:

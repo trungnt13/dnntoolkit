@@ -85,7 +85,8 @@ class BatchTest(unittest.TestCase):
                                 seed=seed, normalizer=None, mode=mode)), 0)
                 y_ = np.concatenate(list(self.y34.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
                                 seed=seed, normalizer=None, mode=mode)), 0)
-                self.assertEqual(np.sum(X_ + y_), 0.,
+                s = (X_ + y_).ravel().tolist()
+                self.assertEqual(s, [0.] * len(s),
                     'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
         for shuffle in (True, False):
             for mode in (0, 1, 2):
@@ -93,17 +94,8 @@ class BatchTest(unittest.TestCase):
                                 seed=seed, normalizer=None, mode=mode)), 0)
                 y_ = np.concatenate(list(self.y.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
                                 seed=seed, normalizer=None, mode=mode)), 0)
-                self.assertEqual(np.sum(X_ + y_), 0.,
-                    'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
-
-        start, end = 0., 1. # this one only support full dataset
-        for shuffle in (False, ):
-            for mode in (0, 2):
-                X_ = np.concatenate(list(self.X12.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
-                                seed=seed, normalizer=None, mode=mode)), 0)
-                y_ = np.concatenate(list(self.Y.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
-                                seed=seed, normalizer=None, mode=mode)), 0)
-                self.assertEqual(np.sum(X_ + y_), 0.,
+                s = (X_ + y_).ravel().tolist()
+                self.assertEqual(s, [0.] * len(s),
                     'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
 
     def test_indexing(self):
@@ -127,18 +119,32 @@ class BatchTest(unittest.TestCase):
     def test_double_iteration(self):
         X12 = dnntoolkit.batch(['X1', 'X2'], [self.f1, self.f2])
         Y12 = dnntoolkit.batch('Y', self.f2)
+
         x = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=False, mode=0)), 0).ravel()
         y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=False, mode=0)), 0).ravel()
-        self.assertEqual(np.sum(x + y), 0)
+        s = (x + y).ravel().tolist()
+        self.assertEqual(s, [0.] * len(s)) # only case with same order
+
         x = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=True, mode=0)), 0).ravel()
         y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=True, mode=0)), 0).ravel()
-        self.assertEqual(np.sum(x + y), 0)
+        self.assertEqual(np.sum(x + y), 0.) # order is different but sum must = 0
+
         x = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=True, mode=2)), 0).ravel()
         y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=True, mode=2)), 0).ravel()
-        self.assertEqual(np.sum(x + y), 0)
-        x = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=True, mode=0)), 0).ravel()
-        y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=True, mode=0)), 0).ravel()
-        self.assertEqual(np.sum(x + y), 0)
+        self.assertEqual(np.sum(x + y), 0.) # order is different but sum must = 0
+
+        # this one only support full dataset, number of element and its value
+        # preserved but different order
+        start, end = 0., 1.
+        seed = np.random.randint(0, 10e8, 1)
+        for shuffle in (False, True):
+            for mode in (0, 2):
+                X_ = np.concatenate(list(self.X12.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                seed=seed, normalizer=None, mode=mode)), 0)
+                y_ = np.concatenate(list(self.Y.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                seed=seed, normalizer=None, mode=mode)), 0)
+                self.assertEqual(np.sum(X_ + y_), 0,
+                    'shuffle=' + str(shuffle) + ', mode=' + str(mode))
 
     def test_single_iteration(self):
         l = np.concatenate(list(self.X34.iter(batch_size=9, mode=0, shuffle=False)), 0)
@@ -146,15 +152,15 @@ class BatchTest(unittest.TestCase):
 
         l = np.concatenate(
             list(self.X34.iter(batch_size=9, mode=0, shuffle=False, start=0., end=0.5)), 0)
-        self.assertEqual(l.ravel().tolist(), range(50) + range(100, 150))
+        self.assertEqual(l.ravel().tolist(), range(100))
 
         l = np.concatenate(
             list(self.X34.iter(batch_size=9, mode=0, shuffle=False, start=0.5, end=0.8)), 0)
-        self.assertEqual(l.ravel().tolist(), range(50, 80) + range(150, 180))
+        self.assertEqual(l.ravel().tolist(), range(100, 160))
 
         l = np.concatenate(
             list(self.X34.iter(batch_size=9, mode=0, shuffle=True, start=0.8, end=0.5)), 0)
-        self.assertEqual(sorted(l.ravel().tolist()), range(50, 80) + range(150, 180))
+        self.assertEqual(sorted(l.ravel().tolist()), range(100, 160))
 
         # ====== Mode=2 ====== #
         l = np.concatenate(
@@ -281,7 +287,8 @@ class BatchTest(unittest.TestCase):
                         y = np.concatenate(
                             list(b2.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
                                         seed=seed, normalizer=None, mode=mode)), 0)
-                        self.assertEqual(np.sum(x - y), 0,
+                        s = (x - y).ravel().tolist()
+                        self.assertEqual(s, [0.] * len(s),
                             'Shuffle=%s mode=%d' % (shuffle, mode))
         except Exception, e:
             raise e
@@ -309,12 +316,39 @@ class BatchTest(unittest.TestCase):
                         y = np.concatenate(
                             list(b2.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
                                         seed=seed, normalizer=None, mode=mode)), 0)
-                        self.assertEqual(np.sum(x - y), 0,
+                        s = (x - y).ravel().tolist()
+                        self.assertEqual(s, [0.] * len(s),
                             'Shuffle=%s mode=%d' % (shuffle, mode))
         except Exception, e:
             raise e
         finally:
             os.remove('test.h5')
+
+    def test_imbalanced_batch_mode0(self):
+        f1 = h5py.File('test1.h5', 'w')
+        f1['X1'] = np.zeros((100, 1)) + 1
+        f2 = h5py.File('test2.h5', 'w')
+        f2['X2'] = np.zeros((5, 1)) + 2
+        f2['X3'] = np.zeros((195, 1)) + 3
+        f2['Y'] = np.asarray([-1] * 100 + [-2] * 5 + [-3] * 195)[:, None]
+        f1.flush()
+        f2.flush()
+        X12 = dnntoolkit.batch(['X1', 'X2', 'X3'], [f1, f2, f2])
+        Y12 = dnntoolkit.batch('Y', f2)
+        s = (X12[:].ravel() + Y12[:].ravel()).tolist()
+        self.assertEqual(s, [0.] * len(s))
+
+        for shuffle in (False, True):
+            for x, y in izip(X12.iter(9, start=0, end=1., shuffle=shuffle, mode=0),
+                             Y12.iter(9, start=0, end=1., shuffle=shuffle, mode=0)):
+                a = (x.ravel() + y.ravel()).tolist()
+                self.assertEqual(a, [0.] * len(a))
+            a = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=shuffle, mode=0)), 0).ravel()
+            b = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=shuffle, mode=0)), 0).ravel()
+            a = (a + b).tolist()
+            self.assertEqual(a, [0.] * len(a))
+        os.remove('test1.h5')
+        os.remove('test2.h5')
 
 class DatasetTest(unittest.TestCase):
 
