@@ -6,6 +6,7 @@ from __future__ import print_function, division
 import os
 
 import numpy as np
+import scipy as sp
 
 import theano
 from theano import tensor
@@ -163,6 +164,97 @@ class BatchTest(unittest.TestCase):
         l = np.concatenate(
             list(self.X34.iter(batch_size=9, mode=2, shuffle=False, start=0.5, end=0.8)), 0)
         self.assertEqual(sorted(l.ravel().tolist()), range(50, 80) + range(150, 180))
+
+    def test_batch_append_duplicate(self):
+        try:
+            f = h5py.File('test.h5', 'w')
+            b = dnntoolkit.batch('test', f)
+            b.append(np.arange(20).reshape(-1, 2))
+            b.duplicate(3)
+
+            b = dnntoolkit.batch(['test1', 'test2'], [f, f])
+            b.append(np.arange(20, 40).reshape(-1, 2))
+            b.append(np.arange(20, 40).reshape(-1, 2))
+            f.close()
+
+            f = h5py.File('test.h5', 'r')
+            # duplicate
+            self.assertEqual(tuple(f['test'].value.ravel().tolist()),
+                             tuple(range(20) * 3))
+            # multiple append
+            self.assertEqual(tuple(f['test1'].value.ravel().tolist()),
+                             tuple(f['test2'].value.ravel().tolist()))
+            self.assertEqual(tuple(f['test1'].value.ravel().tolist()),
+                             tuple(range(20, 40) * 2))
+            f.close()
+        except Exception, e:
+            raise e
+        finally:
+            os.remove('test.h5')
+
+    def test_batch_array_mode(self):
+        b = dnntoolkit.batch(arrays=[
+            np.arange(30, 40).reshape(-1, 2),
+            np.arange(30).reshape(-1, 2)
+        ])
+        b.duplicate(2)
+        self.assertEqual(tuple(b[:].ravel().tolist()),
+                         tuple(range(30, 40) * 2 + range(30) * 2))
+
+        b.append(np.arange(40, 50).reshape(-1, 2))
+        tmp = np.asarray(
+            range(30, 40) * 2 + range(40, 50) + range(30) * 2 + range(40, 50)).reshape(-1, 2)
+        self.assertEqual(tuple(b.value.ravel().tolist()),
+                         tuple(tmp.ravel().tolist()))
+
+        # arithmetic test
+        self.assertEqual(tmp.sum(0).tolist(), b.sum(0).tolist())
+        self.assertEqual(tmp.sum(1).tolist(), b.sum(1).tolist())
+
+        self.assertEqual(np.power(tmp, 2).sum(0).tolist(), b.sum2(0).tolist())
+        self.assertEqual(np.power(tmp, 2).sum(1).tolist(), b.sum2(1).tolist())
+
+        self.assertEqual(tmp.mean(0).tolist(), b.mean(0).tolist())
+        self.assertEqual(tmp.mean(1).tolist(), b.mean(1).tolist())
+
+        self.assertEqual(tmp.var(0).tolist(), b.var(0).tolist())
+        self.assertEqual(tmp.var(1).tolist(), b.var(1).tolist())
+
+        # Iteration test
+        it = np.concatenate(list(b.iter(7, shuffle=False, mode=0)), 0)
+        self.assertEqual(tuple(it.ravel().tolist()),
+                         tuple(tmp.ravel().tolist()))
+
+        it = np.concatenate(list(b.iter(7, shuffle=False, mode=2)), 0)
+        self.assertEqual(np.sum(it), np.sum(tmp))
+        self.assertEqual(tuple([(i, j) for i, j in sp.stats.itemfreq(it.ravel())]),
+                         tuple([(i, j) for i, j in sp.stats.itemfreq(tmp.ravel())]))
+
+        it = np.concatenate(list(b.iter(7, shuffle=True, mode=2)), 0)
+        self.assertEqual(np.sum(it), np.sum(tmp))
+        self.assertEqual(tuple([(i, j) for i, j in sp.stats.itemfreq(it.ravel())]),
+                         tuple([(i, j) for i, j in sp.stats.itemfreq(tmp.ravel())]))
+
+        it = np.concatenate(list(b.iter(7, shuffle=True, mode=2)), 0)
+        self.assertEqual(np.sum(it), np.sum(tmp))
+        self.assertEqual(tuple([(i, j) for i, j in sp.stats.itemfreq(it.ravel())]),
+                         tuple([(i, j) for i, j in sp.stats.itemfreq(tmp.ravel())]))
+
+        it = np.concatenate(list(b.iter(7, shuffle=True, mode=2, start=0.2, end=0.6)), 0)
+        tmp = np.asarray(
+            (range(30, 40) * 2 + range(40, 50))[6:18] +
+            (range(30) * 2 + range(40, 50))[14:42]).reshape(-1, 2)
+        self.assertEqual(np.sum(it), np.sum(tmp))
+        self.assertEqual(tuple([(i, j) for i, j in sp.stats.itemfreq(it.ravel())]),
+                         tuple([(i, j) for i, j in sp.stats.itemfreq(tmp.ravel())]))
+
+        for i in xrange(10): # stable shape for upsample
+            seed = np.random.randint(0, 10e8, 2)
+            it1 = np.concatenate(
+                list(b.iter(7, shuffle=True, mode=1, start=0.2, end=0.6, seed=seed[0])), 0)
+            it2 = np.concatenate(
+                list(b.iter(7, shuffle=True, mode=1, start=0.2, end=0.6, seed=seed[1])), 0)
+            self.assertEqual(it1.shape, it2.shape)
 
 class DatasetTest(unittest.TestCase):
 

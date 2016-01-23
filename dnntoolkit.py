@@ -1477,11 +1477,12 @@ def _parse_data_config(task, data):
     test = None
     valid = None
     if type(data) in (tuple, list):
+        # only specified train data
         if type(data[0]) not in (tuple, list):
             if 'train' in task: train = data
             elif 'test' in task: test = data
             elif 'valid' in task: valid = data
-        else:
+        else: # also specified train and valid
             if len(data) == 1:
                 if 'train' in task: train = data[0]
                 elif 'test' in task: test = data[0]
@@ -1498,13 +1499,15 @@ def _parse_data_config(task, data):
         if 'train' in data: train = data['train']
         if 'test' in data: test = data['test']
         if 'valid' in data: valid = data['valid']
-
+    else:
+        raise NotImplementedError('[data] arguments only support tuple, list, dict')
     return train, valid, test
 
 class trainer(object):
 
     """
-    TODO: request validation function, add custome data (not instance of dataset)
+    TODO: custom data (not instance of dataset), cross training 2 dataset,
+    custome action trigger under certain condition
     Value can be queried on callback:
      - idx(int): current run idx in the strategies, start from 0
      - cost: current training, testing, validating cost
@@ -1586,11 +1589,11 @@ class trainer(object):
         ----------
         data : dnntoolkit.dataset
             dataset instance which contain all your data
-        train : str, list(str)
+        train : str, list(str), numpy.ndarray
             list of dataset used for training
-        valid : str, list(str)
+        valid : str, list(str), numpy.ndarray
             list of dataset used for validation
-        test : str, list(str)
+        test : str, list(str), numpy.ndarray
             list of dataset used for testing
 
         Returns
@@ -1682,7 +1685,9 @@ class trainer(object):
         self._test_end = test_end
         return self
 
-    def set_strategy(self, task=None, data=None, epoch=1, batch=512, validfreq=20, shuffle=True, seed=None, yaml=None):
+    def set_strategy(self, task=None, data=None,
+                     epoch=1, batch=512, validfreq=0.4,
+                     shuffle=True, seed=None, yaml=None):
         ''' Set strategy for training.
 
         Parameters
@@ -1766,6 +1771,12 @@ class trainer(object):
         tmp = self._restart_now
         self._restart_now = False
         return tmp
+
+    def _validate_dataset(self, data):
+        ''' this function convert all pair of:
+        [dataset, dataset_name] -> [batch_object] or [np.ndarray]
+        '''
+        pass
 
     def _create_iter(self, names, batch, shuffle):
         seed = self._seed.randint(0, 10e8)
@@ -2159,28 +2170,38 @@ class batch(object):
         list of dataset key in h5py file
     hdf : h5py.File
         a h5py.File or list of h5py.File
+    arrays : numpy.ndarray, list(numpy.ndarray)
+        if arrays is specified, ignore key and hdf
+
     """
 
-    def __init__(self, key, hdf):
+    def __init__(self, key=None, hdf=None, arrays=None):
         super(batch, self).__init__()
-        if type(key) not in (tuple, list):
-            key = [key]
-        if type(hdf) not in (tuple, list):
-            hdf = [hdf]
-        if len(key) != len(hdf):
-            raise ValueError('[key] and [hdf] must be equal size')
-
-        self._key = key
-        self._hdf = hdf
-        self._data = []
         self._normalizer = lambda x: x
+        if arrays is None:
+            if type(key) not in (tuple, list):
+                key = [key]
+            if type(hdf) not in (tuple, list):
+                hdf = [hdf]
+            if len(key) != len(hdf):
+                raise ValueError('[key] and [hdf] must be equal size')
 
-        for key, hdf in zip(self._key, self._hdf):
-            if key in hdf:
-                self._data.append(hdf[key])
+            self._key = key
+            self._hdf = hdf
+            self._data = []
 
-        if len(self._data) > 0 and len(self._data) != len(self._hdf):
-            raise ValueError('Not all [hdf] file contain given [key]')
+            for key, hdf in zip(self._key, self._hdf):
+                if key in hdf:
+                    self._data.append(hdf[key])
+
+            if len(self._data) > 0 and len(self._data) != len(self._hdf):
+                raise ValueError('Not all [hdf] file contain given [key]')
+            self._is_array_mode = False
+        else:
+            if type(arrays) not in (tuple, list):
+                arrays = [arrays]
+            self._data = arrays
+            self._is_array_mode = True
 
     def _check(self, shape, dtype):
         # if not exist create initial dataset
@@ -2215,6 +2236,8 @@ class batch(object):
     @property
     def value(self):
         self._is_dataset_init()
+        if self._is_array_mode:
+            return np.concatenate([i for i in self._data], axis=0)
         return np.concatenate([i.value for i in self._data], axis=0)
 
     def set_normalizer(self, normalizer):
@@ -2228,11 +2251,14 @@ class batch(object):
             self._normalizer = lambda x: x
         else:
             self._normalizer = normalizer
+        return self
 
     # ==================== Arithmetic ==================== #
     def sum2(self, axis=0):
         ''' sum(X^2) '''
         self._is_dataset_init()
+        if self._is_array_mode:
+            return np.power(self[:], 2).sum(axis)
 
         s = 0
         isInit = False
@@ -2254,6 +2280,8 @@ class batch(object):
     def sum(self, axis=0):
         ''' sum(X) '''
         self._is_dataset_init()
+        if self._is_array_mode:
+            return self[:].sum(axis)
 
         s = 0
         isInit = False
@@ -2280,6 +2308,8 @@ class batch(object):
 
     def var(self, axis=0):
         self._is_dataset_init()
+        if self._is_array_mode:
+            return np.var(np.concatenate(self._data, 0), axis)
 
         v2 = 0
         v1 = 0
@@ -2309,20 +2339,57 @@ class batch(object):
         if not isinstance(other, np.ndarray):
             raise TypeError('Append only support numpy ndarray')
         self._check(other.shape, other.dtype)
-        for d in self._data:
-            _hdf5_append_to_dataset(d, other)
+        if self._is_array_mode:
+            self._data = [np.concatenate((i, other), 0) for i in self._data]
+        else: # hdf5
+            for d in self._data:
+                _hdf5_append_to_dataset(d, other)
         return self
 
     def duplicate(self, other):
+        self._is_dataset_init()
         if not isinstance(other, int):
             raise TypeError('Only duplicate by int factor')
         if len(self._data) == 0:
             raise TypeError("Data haven't initlized yet")
-        for d in self._data:
-            copy = d[:]
-            for i in xrange(other - 1):
-                _hdf5_append_to_dataset(d, copy)
+
+        if self._is_array_mode:
+            self._data = [np.concatenate([i] * other, 0) for i in self._data]
+        else: # hdf5
+            for d in self._data:
+                n = d.shape[0]
+                batch_size = int(max(0.1 * n, 1))
+                for i in xrange(other - 1):
+                    copied = 0
+                    while copied < n:
+                        copy = d[copied: int(min(copied + batch_size, n))]
+                        _hdf5_append_to_dataset(d, copy)
+                        copied += batch_size
         return self
+
+    def sample(self, size, seed=None, proportion=True):
+        '''
+        Parameters
+        ----------
+        proportion : bool
+            will the portion of each dataset in the batch reserved the same
+            as in original dataset
+        '''
+        if seed:
+            np.random.seed(seed)
+
+        all_size = [i.shape[0] for i in self._data]
+        s = sum(all_size)
+        if proportion:
+            idx = [sorted(
+                    np.random.permutation(i)[:round(size * i / s)].tolist()
+                   )
+                   for i in all_size]
+        else:
+            size = int(size / len(all_size))
+            idx = [sorted(np.random.permutation(i)[:size].tolist())
+                   for i in all_size]
+        return np.concatenate([i[j] for i, j in zip(self._data, idx)], 0)
 
     def _iter_fast(self, ds, batch_size, start=None, end=None,
             shuffle=True, seed=None):
@@ -2476,6 +2543,8 @@ class batch(object):
         return np.concatenate([i[key] for i in self._data], axis=0)
 
     def __setitem__(self, key, value):
+        '''
+        '''
         self._is_dataset_init()
         self._check(value.shape, value.dtype)
         if isinstance(key, slice):
@@ -2490,7 +2559,9 @@ class batch(object):
         if len(self._data) == 0:
             return '<batch: None>'
         s = '<batch: '
-        for k, d in zip(self._key, self._data):
+        if self._is_array_mode: key = [''] * len(self._data)
+        else: key = self._key
+        for k, d in zip(key, self._data):
             s += '[%s,%s,%s]-' % (k, d.shape, d.dtype)
         s = s[:-1] + '>'
         return s
