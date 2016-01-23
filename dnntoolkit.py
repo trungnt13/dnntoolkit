@@ -2527,11 +2527,12 @@ class batch(object):
         normalizer : callable, function
             funciton will be applied to each batch before return
         mode : 0, 1, 2
-            0 - default, read one by one each dataset
-            1 - equally read each dataset, upsampling smaller dataset
-                (e.g. batch_size=512, there are 5 dataset => each dataset
-                102 samples) (only work if batch size << dataset size)
-            2 - proportionately read each dataset (e.g. batch_size=512,
+            0 - default, sequentially read each dataset
+            1 - parallel read: equally read each dataset, upsampling
+                smaller dataset (e.g. batch_size=512, there are 5 dataset
+                => each dataset 102 samples) (only work if batch size <<
+                dataset size)
+            2 - parallel read: proportionately for each dataset (e.g. batch_size=512,
                 dataset1_size=1000, dataset2_size=500 => ds1=341, ds2=170)
 
         Returns
