@@ -1499,8 +1499,10 @@ def _parse_data_config(task, data):
         if 'train' in data: train = data['train']
         if 'test' in data: test = data['test']
         if 'valid' in data: valid = data['valid']
-    else:
-        raise NotImplementedError('[data] arguments only support tuple, list, dict')
+    elif data is not None:
+        if 'train' in task: train = [data]
+        if 'test' in task: test = [data]
+        if 'valid' in task: valid = [data]
     return train, valid, test
 
 class trainer(object):
@@ -1772,15 +1774,18 @@ class trainer(object):
         self._restart_now = False
         return tmp
 
-    def _validate_dataset(self, data):
+    def _check_dataset(self, data):
         ''' this function convert all pair of:
-        [dataset, dataset_name] -> [batch_object] or [np.ndarray]
+        [dataset, dataset_name] -> [batch_object]
         '''
-        pass
+        return [batch(arrays=i)
+                if isinstance(i, np.ndarray) else self._dataset[i]
+                for i in data]
 
-    def _create_iter(self, names, batch, shuffle):
+    def _create_iter(self, data, batch, shuffle):
+        ''' data: is [dnntoolkit.batch] instance'''
         seed = self._seed.randint(0, 10e8)
-        data = [self._dataset[i].iter(batch, shuffle=shuffle, seed=seed) for i in names]
+        data = [i.iter(batch, shuffle=shuffle, seed=seed) for i in data]
         return enumerate(zip(*data))
 
     def _finish_train(self, train_cost, restart=False):
@@ -1807,7 +1812,9 @@ class trainer(object):
         elif task == 'test':
             self._test_start(self)
 
-        n_samples = self._dataset[valid_data[0]].shape[0]
+        # convert name and ndarray to [dnntoolkit.batch] object
+        valid_data = self._check_dataset(valid_data)
+        n_samples = valid_data[0].shape[0]
         valid_cost = []
         n = 0
         it = 0
@@ -1868,7 +1875,9 @@ class trainer(object):
         self._train_start(self)
 
         it = 0
-        ntrain = self._dataset[train_data[0]].shape[0]
+        # convert name and ndarray to [dnntoolkit.batch] object
+        train_data = self._check_dataset(train_data)
+        ntrain = train_data[0].shape[0]
         if validfreq < 1.0: # validate validfreq
             validfreq = int(max(validfreq * ntrain / batch, 1))
         train_cost = []
@@ -1935,6 +1944,12 @@ class trainer(object):
         # end training
         return self._finish_train(train_cost, self._early_restart())
 
+    def _get_str_datalist(self, datalist):
+        if not datalist:
+            return 'None'
+        return ', '.join([str(i.shape) if isinstance(i, np.ndarray) else str(i)
+                          for i in datalist])
+
     def debug(self):
         raise NotImplementedError()
 
@@ -1962,9 +1977,9 @@ class trainer(object):
                 if self._log_enable:
                     logger.log('\n******* %d-th run, with configuration: *******' % self.idx)
                     logger.log(' - Task:%s' % task)
-                    logger.log(' - Train data:%s' % str(train))
-                    logger.log(' - Valid data:%s' % str(valid))
-                    logger.log(' - Test data:%s' % str(test))
+                    logger.log(' - Train data:%s' % self._get_str_datalist(train))
+                    logger.log(' - Valid data:%s' % self._get_str_datalist(valid))
+                    logger.log(' - Test data:%s' % self._get_str_datalist(test))
                     logger.log(' - Epoch:%d' % epoch)
                     logger.log(' - Batch:%d' % batch)
                     logger.log(' - Validfreq:%d' % validfreq)
@@ -2004,9 +2019,9 @@ class trainer(object):
         s += 'Dataset:' + str(self._dataset) + '\n'
         s += 'Current run:%d' % self.idx + '\n'
         s += '============ \n'
-        s += 'defTrain:' + str(self._train_data) + '\n'
-        s += 'defValid:' + str(self._valid_data) + '\n'
-        s += 'defTest:' + str(self._test_data) + '\n'
+        s += 'defTrain:' + self._get_str_datalist(self._train_data) + '\n'
+        s += 'defValid:' + self._get_str_datalist(self._valid_data) + '\n'
+        s += 'defTest:' + self._get_str_datalist(self._test_data) + '\n'
         s += '============ \n'
         s += 'Cost_func:' + str(self._cost_func) + '\n'
         s += 'Updates_func:' + str(self._updates_func) + '\n'
