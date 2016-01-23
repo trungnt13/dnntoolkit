@@ -256,6 +256,39 @@ class BatchTest(unittest.TestCase):
                 list(b.iter(7, shuffle=True, mode=1, start=0.2, end=0.6, seed=seed[1])), 0)
             self.assertEqual(it1.shape, it2.shape)
 
+    def test_consitent_iter_hdfBatch(self):
+        try:
+            f = h5py.File('test.h5', 'w')
+            f['X'] = np.arange(100).reshape(-1, 2)
+            f['y'] = np.arange(100, 200).reshape(-1, 2)
+
+            f1 = h5py.File('test1.h5', 'w')
+            f1['X'] = np.arange(100).reshape(-1, 2)
+            f1['y'] = np.arange(100, 200).reshape(-1, 2)
+
+            b1 = dnntoolkit.batch(['X', 'y'], [f, f1])
+            b2 = dnntoolkit.batch(['X', 'y'], [f1, f])
+            self.assertEqual(np.sum(b1[:] - b2[:]), 0)
+
+            for i in xrange(10):
+                start, end = np.random.rand(1)[0] / 2, np.random.rand(1)[0] / 2 + 0.5
+                seed = 13
+                for shuffle in (True, False):
+                    for mode in (0, 1, 2):
+                        x = np.concatenate(
+                            list(b1.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                        seed=seed, normalizer=None, mode=mode)), 0)
+                        y = np.concatenate(
+                            list(b2.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                        seed=seed, normalizer=None, mode=mode)), 0)
+                        self.assertEqual(np.sum(x - y), 0,
+                            'Shuffle=%s mode=%d' % (shuffle, mode))
+        except Exception, e:
+            raise e
+        finally:
+            os.remove('test.h5')
+            os.remove('test1.h5')
+
     def test_iter_matching_arrayBatch_hdfBatch(self):
         try:
             f = h5py.File('test.h5', 'w')
