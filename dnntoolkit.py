@@ -2090,7 +2090,7 @@ class trainer(object):
                     logger.log(' - Valid data:%s' % self._get_str_datalist(valid))
                     logger.log(' - Test data:%s' % self._get_str_datalist(test))
                     logger.log(' - Cross data:%s' % self._get_str_datalist(cross))
-                    logger.log(' - Cross prob:%f' % pcross)
+                    logger.log(' - Cross prob:%s' % str(pcross))
                     logger.log(' - Epoch:%d' % epoch)
                     logger.log(' - Batch:%d' % batch)
                     logger.log(' - Validfreq:%d' % validfreq)
