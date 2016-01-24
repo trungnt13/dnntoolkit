@@ -52,8 +52,10 @@ cost_train += cost_regu
 params = lasagne.layers.get_all_params(ai, trainable=True)
 grad = tensor.grad(cost_train, params)
 print('Suggest learning rate: %f' % dnntoolkit.dnn.calc_lr(m.get_nweights(), m.get_nlayers()))
+lr = dnntoolkit.tensor.shared_scalar(
+    dnntoolkit.dnn.calc_lr(m.get_nweights(), m.get_nlayers()))
 updates = lasagne.updates.rmsprop(grad, params,
-    learning_rate=dnntoolkit.dnn.calc_lr(m.get_nweights(), m.get_nlayers()))
+    learning_rate=lr)
 
 f_cost = theano.function(
     inputs=input_var + [y],
@@ -64,6 +66,30 @@ f_update = theano.function(
     outputs=cost_train,
     updates=updates,
     allow_input_downcast=True)
+
+# ===========================================================================
+# Callback
+# ===========================================================================
+ # => valid Stats: Mean:0.9354 Var:0.00 Med:0.94 Min:0.91 Max:0.97
+stopAllow = 3
+def validend(trainer):
+    m.record(np.mean(trainer.cost), 'validend')
+    cost = [1. - i for i in m.select('validend')]
+    save, stop = dnntoolkit.dnn.earlystop(cost, generalization_loss=True, threshold=3)
+    if save:
+        print('\nSaving !!!')
+        m.save()
+    if stop:
+        global stopAllow
+        if stopAllow > 0:
+            print('\nDecreasing lr !!!')
+            lr.set_value(lr.get_value() / 2)
+            # m.rollback()
+        else:
+            print('\nStopping !!!')
+            trainer.stop()
+        stopAllow -= 1
+
 
 # ===========================================================================
 # TRainer
@@ -95,21 +121,25 @@ def ycross_it_new(size, shuffle, seed):
         yield ycross[i[0]:i[-1]]
 
 trainer = dnntoolkit.trainer()
+trainer.set_callback(valid_end=validend)
 trainer.set_dataset(ds,
     valid=['X_valid', ds['y_valid'].value],
-    cross=[Xcross_it_new, ycross_it_new],
+    test=['X_test', 'y_test'],
+    cross=[Xcross, ycross],
     pcross=0.1
 )
 trainer.set_model(f_cost, f_update)
 trainer.set_strategy(
     task='train',
-    epoch=10,
+    epoch=100,
     batch=128,
     validfreq=0.6,
     shuffle=True,
     data=[ds['X_train'].value, ds['y_train']],
     seed=12082518,
     # cross=[Xcross_it, ycross_it],
-    pcross=0.2)
+    pcross=0.2).set_strategy(
+    task='test',
+    batch=128)
 print(trainer)
 trainer.run()

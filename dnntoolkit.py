@@ -1920,19 +1920,16 @@ class trainer(object):
             self._batch_end(self)
             self.data = None
             self.cost = None
-
-        # ====== callback ====== #
+        # ====== statistic of validation ====== #
         self.cost = valid_cost
+        logger.log('\n => %s Stats: Mean:%.4f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
+                (task, np.mean(self.cost), np.var(self.cost), np.median(self.cost),
+                np.percentile(self.cost, 5), np.percentile(self.cost, 95)))
+        # ====== callback ====== #
         if task == 'valid':
             self._valid_end(self) # callback
         else:
             self._test_end(self)
-
-        # ====== statistic of validation ====== #
-        logger.log('\n => %s Stats: Mean:%.4f Var:%.2f Med:%.2f Min:%.2f Max:%.2f' %
-                (task, np.mean(self.cost), np.var(self.cost), np.median(self.cost),
-                np.percentile(self.cost, 5), np.percentile(self.cost, 95)))
-
         # ====== reset all flag ====== #
         self.cost = None
         self.task = None
@@ -3431,7 +3428,8 @@ class logger():
     @staticmethod
     def info(*anything, **kwargs):
         logger._check_init_logger()
-        logger._default_logger.info(*anything)
+        if len(anything) == 0: logger._default_logger.info('')
+        else: logger._default_logger.info(*anything)
 
     @staticmethod
     def log(*anything, **kwargs):
