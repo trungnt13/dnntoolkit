@@ -3356,10 +3356,6 @@ class logger():
     @staticmethod
     def set_enable(is_enable):
         logger._is_enable = is_enable
-        if is_enable:
-            logger._default_logger.setLevel(10) # debug level
-        else:
-            logger._default_logger.setLevel(88) # you shall not pass!
 
     @staticmethod
     def _check_init_logger():
@@ -3407,26 +3403,31 @@ class logger():
 
     @staticmethod
     def warning(*anything, **kwargs):
+        if not logger._is_enable: return
         logger._check_init_logger()
         logger._default_logger.warning(*anything)
 
     @staticmethod
     def error(*anything, **kwargs):
+        if not logger._is_enable: return
         logger._check_init_logger()
         logger._default_logger.error(*anything)
 
     @staticmethod
     def critical(*anything, **kwargs):
+        if not logger._is_enable: return
         logger._check_init_logger()
         logger._default_logger.critical(*anything)
 
     @staticmethod
     def debug(*anything, **kwargs):
+        if not logger._is_enable: return
         logger._check_init_logger()
         logger._default_logger.debug(*anything)
 
     @staticmethod
     def info(*anything, **kwargs):
+        if not logger._is_enable: return
         logger._check_init_logger()
         if len(anything) == 0: logger._default_logger.info('')
         else: logger._default_logger.info(*anything)
@@ -3434,6 +3435,7 @@ class logger():
     @staticmethod
     def log(*anything, **kwargs):
         '''This log is at INFO level'''
+        if not logger._is_enable: return
         import logging
         logger._check_init_logger()
         # format with only messages
@@ -3626,7 +3628,7 @@ class speech():
                 rval[0] = i
                 break
         # cluster_id
-        fixed_label = label.replace('por-', 'spa-')
+        fixed_label = label.replace('por-brz', 'spa-brz')
         for i, j in enumerate(speech.nist15_cluster_lang.keys()):
             if j in fixed_label:
                 rval[1] = i
