@@ -1486,10 +1486,10 @@ class model(object):
         if 'model_func' in f:
             b = cPickle.loads(f['model_func'].value)
             m._model_func = marshal.loads(b.tostring())
+            sandbox = globals().copy() # create sandbox
+            sandbox.update(deserialize_sandbox(m._sandbox))
             m._model_func = types.FunctionType(
-                                m._model_func,
-                                deserialize_sandbox(m._sandbox),
-                                m._model_name)
+                                m._model_func, sandbox, m._model_name)
         else: m._model_func = None
 
         # load weighs
