@@ -37,6 +37,7 @@ import time
 import warnings
 from stat import S_ISDIR
 
+import itertools
 from six.moves import zip, zip_longest
 from collections import OrderedDict, defaultdict
 
@@ -1469,6 +1470,26 @@ class model(object):
 # ======================================================================
 # Trainer
 # ======================================================================
+class _iterator_wrapper(object):
+    '''Fake class with iter function like dnntoolkit.batch'''
+
+    def __init__(self, creator):
+        super(_iterator_wrapper, self).__init__()
+        self.creator = creator
+
+    def iter(self, batch, shuffle, seed):
+        ''' Create and return an iterator'''
+        creator = self.creator
+        if hasattr(creator, '__call__'):
+            return creator(batch, shuffle, seed)
+        elif hasattr(creator, 'next'):
+            creator, news = itertools.tee(creator)
+            self.creator = creator
+            return news
+        else:
+            raise ValueError(
+                'Creator of data for trainer must be a function or iterator')
+
 def _callback(trainer):
     pass
 
@@ -1596,13 +1617,13 @@ class trainer(object):
         ----------
         data : dnntoolkit.dataset
             dataset instance which contain all your data
-        train : str, list(str), numpy.ndarray, dnntoolkit.batch, iterator
+        train : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed)-return iter
             list of dataset used for training
-        valid : str, list(str), numpy.ndarray, dnntoolkit.batch, iterator
+        valid : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed)-return iter
             list of dataset used for validation
-        test : str, list(str), numpy.ndarray, dnntoolkit.batch, iterator
+        test : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed)-return iter
             list of dataset used for testing
-        cross : str, list(str), numpy.ndarray, dnntoolkit.batch, iterator
+        cross : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed)-return iter
             list of dataset used for cross training
         pcross : float (0.0-1.0)
             probablity of doing cross training when training, None=default=0.3
@@ -1816,6 +1837,8 @@ class trainer(object):
                 batches.append(batch(arrays=i))
             elif isinstance(i, batch):
                 batches.append(i)
+            elif hasattr(i, '__call__') or hasattr(i, 'next'):
+                batches.append(_iterator_wrapper(i))
             else:
                 batches.append(self._dataset[i])
         return batches
@@ -1831,10 +1854,8 @@ class trainer(object):
             for d in zip(*data):
                 if random.random() < pcross:
                     try:
-                        print('shit')
                         yield cross_it.next()
-                    except:
-                        print('damn')
+                    except StopIteration: # recreate cross iter
                         seed = self._seed.randint(0, 10e8)
                         cross_it = zip(*[i.iter(batch, shuffle=shuffle, seed=seed)
                                          for i in cross])
