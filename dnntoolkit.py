@@ -993,6 +993,48 @@ def _is_tags_match(func, tags, absolute=False):
         return False
     return True
 
+def serialize_sandbox(environment):
+    '''environment : globals(), locals()
+    Returns
+    -------
+    dictionary : cPickle dumps-able dictionary to store as text
+    '''
+    import types
+    import re
+    sys_module = re.compile('__\w+__')
+    primitive = (bool, int, float, str,
+                 tuple, list, dict, type, types.ModuleType)
+    ignore_key = ['__name__', '__file__']
+    sandbox = {}
+    for k, v in environment.iteritems():
+        if k in ignore_key: continue
+        if type(v) in primitive and sys_module.match(k) is None:
+            if isinstance(v, types.ModuleType):
+                v = {'name': v.__name__, '__module': True}
+            sandbox[k] = v
+
+    return sandbox
+
+def deserialize_sandbox(sandbox):
+    '''
+    environment : dictionary
+        create by `serialize_sandbox`
+    '''
+    if not isinstance(sandbox, dict):
+        raise ValueError(
+            '[environment] must be dictionary created by serialize_sandbox')
+    import types
+    import importlib
+    primitive = (bool, int, float, str,
+                 tuple, list, dict, type, types.ModuleType)
+    environment = {}
+    for k, v in sandbox.iteritems():
+        if type(v) in primitive:
+            if isinstance(v, dict) and '__module' in v:
+                v = importlib.import_module(v['name'])
+            environment[k] = v
+    return environment
+
 class model(object):
 
     """docstring for Model
@@ -1095,19 +1137,13 @@ class model(object):
         '''
         if not hasattr(model, '__call__'):
             raise NotImplementedError('Model must be a function return computational graph')
-
-        primitive = (bool, int, float, str)
         sandbox = {}
-
         # ====== Lasagne ====== #
         if 'lasagne' in api:
             self._api = 'lasagne'
             self._model_func = model
             # store all primitive and api type
-            for k, v in model.func_globals.items():
-                is_api_type = (type(v) == type and 'lasagne' in str(v))
-                if isinstance(v, primitive) or is_api_type:
-                    sandbox[k] = v
+            sandbox = serialize_sandbox(model.func_globals)
         # ====== Keras ====== #
         elif 'keras' in api:
             self._api = 'keras'
@@ -1444,19 +1480,16 @@ class model(object):
         else: m._model_args = None
         if 'sandbox' in f:
             m._sandbox = cPickle.loads(f['sandbox'].value)
-        else: m._sandbox = None
-
-        # insert sandbox to globals
-        if m._api is not None and m._sandbox is not None:
-            globals()[m._api] = __import__(m._api)
-            for k, v in m._sandbox.iteritems():
-                globals()[k] = v
+        else: m._sandbox = {}
 
         # load model_func code
         if 'model_func' in f:
             b = cPickle.loads(f['model_func'].value)
             m._model_func = marshal.loads(b.tostring())
-            m._model_func = types.FunctionType(m._model_func, globals(), m._model_name)
+            m._model_func = types.FunctionType(
+                                m._model_func,
+                                deserialize_sandbox(m._sandbox),
+                                m._model_name)
         else: m._model_func = None
 
         # load weighs
