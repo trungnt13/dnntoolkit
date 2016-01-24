@@ -1136,7 +1136,7 @@ class model(object):
          and save it to file to create checkpoint of save_path available
         '''
         if self._model_func is None:
-            raise ValueError("You must save_model first")
+            raise ValueError("You must set_model first")
         if self._model is None:
             func = self._model_func
             args = self._model_args
