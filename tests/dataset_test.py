@@ -26,8 +26,8 @@ def generateData():
     f['X1'] = np.zeros((100, 1)) + 1
     f['Y1'] = np.zeros((100, 1)) - 1
 
-    f['X3'] = np.arange(100)[:, None]
-    f['Y4'] = -np.arange(100, 200)[:, None]
+    f['X3'] = np.arange(100).reshape(-1, 2)
+    f['Y4'] = -np.arange(100, 200).reshape(-1, 2)
 
     f['X5'] = np.arange(100).reshape(-1, 2)
 
@@ -39,8 +39,8 @@ def generateData():
     f['X2'] = np.zeros((200, 1)) + 2
     f['Y2'] = np.zeros((200, 1)) - 2
 
-    f['Y3'] = -np.arange(100)[:, None]
-    f['X4'] = np.arange(100, 200)[:, None]
+    f['Y3'] = -np.arange(100).reshape(-1, 2)
+    f['X4'] = np.arange(100, 200).reshape(-1, 2)
 
     f['X5'] = np.arange(100, 200).reshape(-1, 2)
 
@@ -77,26 +77,35 @@ class BatchTest(unittest.TestCase):
         self.f2.close()
 
     def test_cross_iter_2_hdf(self):
-        start, end = np.random.rand(1)[0] / 2, np.random.rand(1)[0] / 2 + 0.5
-        seed = 13
-        for shuffle in (True, False):
-            for mode in (0, 1, 2):
-                X_ = np.concatenate(list(self.X34.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
-                                seed=seed, normalizer=None, mode=mode)), 0)
-                y_ = np.concatenate(list(self.y34.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
-                                seed=seed, normalizer=None, mode=mode)), 0)
-                s = (X_ + y_).ravel().tolist()
-                self.assertEqual(s, [0.] * len(s),
-                    'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
-        for shuffle in (True, False):
-            for mode in (0, 1, 2):
-                X_ = np.concatenate(list(self.X.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
-                                seed=seed, normalizer=None, mode=mode)), 0)
-                y_ = np.concatenate(list(self.y.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
-                                seed=seed, normalizer=None, mode=mode)), 0)
-                s = (X_ + y_).ravel().tolist()
-                self.assertEqual(s, [0.] * len(s),
-                    'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
+        for i in xrange(10):
+            start, end = np.random.rand(1)[0] / 2, np.random.rand(1)[0] / 2
+            while abs(start) - abs(end) < 0.1:
+                start, end = np.random.rand(1)[0] / 2, np.random.rand(1)[0] / 2
+            seed = 13
+            # All batch is similar
+            for shuffle in (True, False):
+                for mode in (0, 1, 2):
+                    for X_, y_ in izip(
+                        self.X34.iter(batch_size=9, start=start, end=end,
+                                      shuffle=shuffle, seed=seed, normalizer=None, mode=mode),
+                        self.y34.iter(batch_size=9, start=start, end=end,
+                                      shuffle=shuffle, seed=seed, normalizer=None, mode=mode)):
+                        s = (X_ + y_).ravel().tolist()
+                        self.assertEqual(s, [0.] * len(s),
+                            'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
+                        s = np.sum(X_.ravel() == -y_.ravel())
+                        self.assertEqual(s, np.prod(X_.shape),
+                            'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
+            for shuffle in (True, False):
+                for mode in (0, 1, 2):
+                    for X_, y_ in izip(
+                        self.X.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                    seed=seed, normalizer=None, mode=mode),
+                        self.y.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
+                                    seed=seed, normalizer=None, mode=mode)):
+                        s = (X_ + y_).ravel().tolist()
+                        self.assertEqual(s, [0.] * len(s),
+                            'X and y has different order, shuffle=' + str(shuffle) + ', mode=' + str(mode))
 
     def test_indexing(self):
         self.assertEqual(self.X34[:].ravel().tolist(), range(200))

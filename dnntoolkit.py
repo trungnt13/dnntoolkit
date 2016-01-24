@@ -32,6 +32,7 @@ from __future__ import print_function, division
 import os
 import sys
 import math
+import random
 import time
 import warnings
 from stat import S_ISDIR
@@ -1166,8 +1167,8 @@ class model(object):
                         for i, w in enumerate(weights):
                             if 'weight_%d' % i in f: del f['weight_%d' % i]
                             f['weight_%d' % i] = w
-                    except:
-                        print('shit')
+                    except Exception, e:
+                        raise e
                     f.close()
         return self._model
 
@@ -1558,6 +1559,9 @@ class trainer(object):
         self._log_enable = True
         self._log_newline = False
 
+        self._cross_data = None
+        self._pcross = 0.3
+
     # ==================== Trigger Command ==================== #
     def stop(self):
         ''' Stop current activity of this trainer immediatelly '''
@@ -1584,19 +1588,24 @@ class trainer(object):
         self._log_enable = enable
         self._log_newline = newline
 
-    def set_dataset(self, data, train=None, valid=None, test=None):
+    def set_dataset(self, data, train=None, valid=None,
+        test=None, cross=None, pcross=None):
         ''' Set dataset for trainer.
 
         Parameters
         ----------
         data : dnntoolkit.dataset
             dataset instance which contain all your data
-        train : str, list(str), numpy.ndarray
+        train : str, list(str), numpy.ndarray, dnntoolkit.batch, iterator
             list of dataset used for training
-        valid : str, list(str), numpy.ndarray
+        valid : str, list(str), numpy.ndarray, dnntoolkit.batch, iterator
             list of dataset used for validation
-        test : str, list(str), numpy.ndarray
+        test : str, list(str), numpy.ndarray, dnntoolkit.batch, iterator
             list of dataset used for testing
+        cross : str, list(str), numpy.ndarray, dnntoolkit.batch, iterator
+            list of dataset used for cross training
+        pcross : float (0.0-1.0)
+            probablity of doing cross training when training, None=default=0.3
 
         Returns
         -------
@@ -1628,6 +1637,13 @@ class trainer(object):
             if type(test) not in (tuple, list):
                 test = [test]
             self._test_data = test
+
+        if cross is not None:
+            if type(cross) not in (tuple, list):
+                cross = [cross]
+            self._cross_data = cross
+        if self._pcross:
+            self._pcross = pcross
         return self
 
     def set_model(self, cost_func=None, updates_func=None):
@@ -1689,7 +1705,8 @@ class trainer(object):
 
     def set_strategy(self, task=None, data=None,
                      epoch=1, batch=512, validfreq=0.4,
-                     shuffle=True, seed=None, yaml=None):
+                     shuffle=True, seed=None, yaml=None,
+                     cross=None, pcross=None):
         ''' Set strategy for training.
 
         Parameters
@@ -1716,6 +1733,10 @@ class trainer(object):
         yaml : str
             path to yaml strategy file. When specify this arguments,
             all other arguments are ignored
+        cross : str, list(str), numpy.ndarray
+            list of dataset used for cross training
+        pcross : float (0.0-1.0)
+            probablity of doing cross training when training
 
         Returns
         -------
@@ -1736,6 +1757,8 @@ class trainer(object):
                 if 'epoch' not in s: s['epoch'] = epoch
                 if 'shuffle' not in s: s['shuffle'] = shuffle
                 if 'data' not in s: s['data'] = data
+                if 'cross' not in s: s['cross'] = cross
+                if 'pcross' not in s: s['pcross'] = pcross
                 if 'seed' in s: self._seed = RandomState(seed)
                 self._strategy.append(s)
             return
@@ -1749,7 +1772,9 @@ class trainer(object):
             'epoch': epoch,
             'batch': batch,
             'shuffle': shuffle,
-            'validfreq': validfreq
+            'validfreq': validfreq,
+            'cross': cross,
+            'pcross': pcross
         })
         if seed is not None:
             self._seed = RandomState(seed)
@@ -1774,19 +1799,49 @@ class trainer(object):
         self._restart_now = False
         return tmp
 
+    def _get_str_datalist(self, datalist):
+        if not datalist:
+            return 'None'
+        return ', '.join(['<Array: ' + str(i.shape) + '>'
+                          if isinstance(i, np.ndarray) else str(i)
+                          for i in datalist])
+
     def _check_dataset(self, data):
         ''' this function convert all pair of:
         [dataset, dataset_name] -> [batch_object]
         '''
-        return [batch(arrays=i)
-                if isinstance(i, np.ndarray) else self._dataset[i]
-                for i in data]
+        batches = []
+        for i in data:
+            if isinstance(i, np.ndarray):
+                batches.append(batch(arrays=i))
+            elif isinstance(i, batch):
+                batches.append(i)
+            else:
+                batches.append(self._dataset[i])
+        return batches
 
-    def _create_iter(self, data, batch, shuffle):
+    def _create_iter(self, data, batch, shuffle, cross=None, pcross=0.3):
         ''' data: is [dnntoolkit.batch] instance'''
         seed = self._seed.randint(0, 10e8)
         data = [i.iter(batch, shuffle=shuffle, seed=seed) for i in data]
-        return enumerate(zip(*data))
+        if cross:
+            seed = self._seed.randint(0, 10e8)
+            cross_it = zip(*[i.iter(batch, shuffle=shuffle, seed=seed)
+                             for i in cross])
+            for d in zip(*data):
+                if random.random() < pcross:
+                    try:
+                        print('shit')
+                        yield cross_it.next()
+                    except:
+                        print('damn')
+                        seed = self._seed.randint(0, 10e8)
+                        cross_it = zip(*[i.iter(batch, shuffle=shuffle, seed=seed)
+                                         for i in cross])
+                yield d
+        else:
+            for d in zip(*data):
+                yield d
 
     def _finish_train(self, train_cost, restart=False):
         self.cost = train_cost
@@ -1818,7 +1873,7 @@ class trainer(object):
         valid_cost = []
         n = 0
         it = 0
-        for i, data in self._create_iter(valid_data, batch, False):
+        for data in self._create_iter(valid_data, batch, False):
             # batch start
             it += 1
             n += data[0].shape[0]
@@ -1863,7 +1918,8 @@ class trainer(object):
         self.iter = 0
         return True
 
-    def _train(self, train_data, valid_data, epoch, batch, validfreq, shuffle):
+    def _train(self, train_data, valid_data, epoch, batch, validfreq, shuffle,
+               cross=None, pcross=0.3):
         '''
         Return
         ------
@@ -1873,10 +1929,11 @@ class trainer(object):
         self.task = 'train'
         self.iter = 0
         self._train_start(self)
-
         it = 0
         # convert name and ndarray to [dnntoolkit.batch] object
         train_data = self._check_dataset(train_data)
+        if cross: cross = self._check_dataset(cross)
+
         ntrain = train_data[0].shape[0]
         if validfreq < 1.0: # validate validfreq
             validfreq = int(max(validfreq * ntrain / batch, 1))
@@ -1891,7 +1948,8 @@ class trainer(object):
             epoch_cost = []
             n = 0
             # ====== start batches ====== #
-            for j, data in self._create_iter(train_data, batch, shuffle):
+            for data in self._create_iter(train_data, batch, shuffle,
+                                          cross, pcross):
                 # start batch
                 n += data[0].shape[0]
                 it += 1
@@ -1944,12 +2002,6 @@ class trainer(object):
         # end training
         return self._finish_train(train_cost, self._early_restart())
 
-    def _get_str_datalist(self, datalist):
-        if not datalist:
-            return 'None'
-        return ', '.join([str(i.shape) if isinstance(i, np.ndarray) else str(i)
-                          for i in datalist])
-
     def debug(self):
         raise NotImplementedError()
 
@@ -1968,6 +2020,12 @@ class trainer(object):
                 if train is None: train = self._train_data
                 if test is None: test = self._test_data
                 if valid is None: valid = self._valid_data
+                cross = config['cross']
+                pcross = config['pcross']
+                if pcross is None: pcross = self._pcross
+                if cross is None: cross = self._cross_data
+                elif not hasattr(cross, '__len__'):
+                    cross = [cross]
 
                 epoch = config['epoch']
                 batch = config['batch']
@@ -1980,6 +2038,8 @@ class trainer(object):
                     logger.log(' - Train data:%s' % self._get_str_datalist(train))
                     logger.log(' - Valid data:%s' % self._get_str_datalist(valid))
                     logger.log(' - Test data:%s' % self._get_str_datalist(test))
+                    logger.log(' - Cross data:%s' % self._get_str_datalist(cross))
+                    logger.log(' - Cross prob:%f' % pcross)
                     logger.log(' - Epoch:%d' % epoch)
                     logger.log(' - Batch:%d' % batch)
                     logger.log(' - Validfreq:%d' % validfreq)
@@ -1991,7 +2051,8 @@ class trainer(object):
                         logger.warning('*** no TRAIN data found, ignored **')
                     else:
                         while (not self._train(
-                                train, valid, epoch, batch, validfreq, shuffle)):
+                                train, valid, epoch, batch, validfreq, shuffle,
+                                cross, pcross)):
                             pass
                 elif 'valid' in task:
                     if valid is None:
@@ -2022,6 +2083,8 @@ class trainer(object):
         s += 'defTrain:' + self._get_str_datalist(self._train_data) + '\n'
         s += 'defValid:' + self._get_str_datalist(self._valid_data) + '\n'
         s += 'defTest:' + self._get_str_datalist(self._test_data) + '\n'
+        s += 'defCross:' + self._get_str_datalist(self._cross_data) + '\n'
+        s += 'pCross:' + str(self._pcross) + '\n'
         s += '============ \n'
         s += 'Cost_func:' + str(self._cost_func) + '\n'
         s += 'Updates_func:' + str(self._updates_func) + '\n'
@@ -2042,12 +2105,18 @@ class trainer(object):
             if train is None: train = self._train_data
             if test is None: test = self._test_data
             if valid is None: valid = self._valid_data
+            cross = st['cross']
+            pcross = st['pcross']
+            if cross and not hasattr(cross, '__len__'):
+                cross = [cross]
 
             s += '====== Strategy %d-th ======\n' % i
             s += ' - Task:%s' % st['task'] + '\n'
-            s += ' - Train:%s' % str(train) + '\n'
-            s += ' - Valid:%s' % str(valid) + '\n'
-            s += ' - Test:%s' % str(test) + '\n'
+            s += ' - Train:%s' % self._get_str_datalist(train) + '\n'
+            s += ' - Valid:%s' % self._get_str_datalist(valid) + '\n'
+            s += ' - Test:%s' % self._get_str_datalist(test) + '\n'
+            s += ' - Cross:%s' % self._get_str_datalist(cross) + '\n'
+            s += ' - pCross:%s' % str(pcross) + '\n'
             s += ' - Epoch:%d' % st['epoch'] + '\n'
             s += ' - Batch:%d' % st['batch'] + '\n'
             s += ' - Shuffle:%s' % st['shuffle'] + '\n'
@@ -2425,8 +2494,8 @@ class batch(object):
             start, end, prng1)
         prng2.shuffle(batches)
         for i, j in batches:
-            data = ds[i:j][prng2.permutation(j - i)]
-            yield self._normalizer(data)
+            data = ds[i:j]
+            yield self._normalizer(data[prng2.permutation(data.shape[0])])
 
     def _iter_slow(self, batch_size=128, start=None, end=None,
         shuffle=True, seed=None, mode=0):
