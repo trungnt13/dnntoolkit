@@ -240,7 +240,7 @@ class mpi():
 
         all_data = comm.gather(data, root=0)
         if rank == 0:
-            logger.info('Saving data before exit !!!!\n')
+            logger.info('Finished preprocess_mpi !!!!\n')
             all_data = [k for j in all_data for k in j]
             if len(all_data) > 0:
                 save_func(all_data)
