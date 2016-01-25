@@ -165,6 +165,7 @@ class mpi():
                 \ \ \ | / / /
                   save_func
             * NO need call Barrier at the end of this methods
+
         Parameters
         ----------
         jobs_list : list
@@ -178,22 +179,26 @@ class mpi():
         log_point : int
             after this amount of preprocessed data, print log
 
+        Notes
+        -----
+        Any None return by features_func will be ignored
+
         Example
         -------
-            >>> jobs = range(1, 110)
-            >>> if rank == 0:
-            >>>     f = h5py.File('tmp.hdf5', 'w')
-            >>>     idx = 0
-            >>> def feature_extract(j):
-            >>>     return rank
-            >>> def save(j):
-            >>>     global idx
-            >>>     f[str(idx)] = str(j)
-            >>>     idx += 1
-            >>> dnntoolkit.mpi.preprocess_mpi(jobs, feature_extract, save, n_cache=5)
-            >>> if rank == 0:
-            >>>     f['idx'] = idx
-            >>>     f.close()
+        >>> jobs = range(1, 110)
+        >>> if rank == 0:
+        >>>     f = h5py.File('tmp.hdf5', 'w')
+        >>>     idx = 0
+        >>> def feature_extract(j):
+        >>>     return rank
+        >>> def save(j):
+        >>>     global idx
+        >>>     f[str(idx)] = str(j)
+        >>>     idx += 1
+        >>> dnntoolkit.mpi.preprocess_mpi(jobs, feature_extract, save, n_cache=5)
+        >>> if rank == 0:
+        >>>     f['idx'] = idx
+        >>>     f.close()
         '''
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
