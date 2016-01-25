@@ -96,8 +96,15 @@ def validend(trainer):
 # ===========================================================================
 Xcross = np.random.rand(1000, 28, 28)
 ycross = dnntoolkit.tensor.to_categorical(np.random.randint(0, 10, size=1000))
+
+def cross_it(*args):
+    # print('**cross_it**')
+    idx = range(1000)
+    for i, j in zip(idx, idx[1:]):
+        yield Xcross[i:j], ycross[i:j]
+
 def Xcross_it(*args):
-    # print('IT')
+    # print('**IT**')
     idx = range(1000)
     for i, j in zip(idx, idx[1:]):
         yield Xcross[i:j]
@@ -106,14 +113,14 @@ def ycross_it(*args):
     for i, j in zip(idx, idx[1:]):
         yield ycross[i:j]
 
-def Xcross_it_new(size, shuffle, seed):
+def Xcross_it_new(size, shuffle, seed, mode):
     # print('IT new')
     np.random.seed(seed)
     batches = dnntoolkit.mpi.segment_job(range(1000), int(1000 / size))
     np.random.shuffle(batches)
     for i in batches:
         yield Xcross[i[0]:i[-1]]
-def ycross_it_new(size, shuffle, seed):
+def ycross_it_new(size, shuffle, seed, mode):
     np.random.seed(seed)
     batches = dnntoolkit.mpi.segment_job(range(1000), int(1000 / size))
     np.random.shuffle(batches)
@@ -125,7 +132,7 @@ trainer.set_callback(valid_end=validend)
 trainer.set_dataset(ds,
     valid=['X_valid', ds['y_valid'].value],
     test=['X_test', 'y_test'],
-    cross=[Xcross, ycross],
+    cross=[cross_it],
     pcross=0.1
 )
 trainer.set_model(f_cost, f_update)

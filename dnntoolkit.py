@@ -1515,7 +1515,7 @@ class _iterator_wrapper(object):
         super(_iterator_wrapper, self).__init__()
         self.creator = creator
 
-    def iter(self, batch, shuffle, seed):
+    def iter(self, batch, shuffle, seed, mode, *args, **kwargs):
         ''' Create and return an iterator'''
         creator = self.creator
         if hasattr(creator, '__call__'):
@@ -1670,13 +1670,13 @@ class trainer(object):
         ----------
         data : dnntoolkit.dataset
             dataset instance which contain all your data
-        train : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed)-return iter
+        train : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed, mode)-return iter
             list of dataset used for training
-        valid : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed)-return iter
+        valid : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed, mode)-return iter
             list of dataset used for validation
-        test : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed)-return iter
+        test : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed, mode)-return iter
             list of dataset used for testing
-        cross : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed)-return iter
+        cross : str, list(str), np.ndarray, dnntoolkit.batch, iter, func(batch, shuffle, seed, mode)-return iter
             list of dataset used for cross training
         pcross : float (0.0-1.0)
             probablity of doing cross training when training, None=default=0.3
@@ -1911,7 +1911,7 @@ class trainer(object):
         if cross: # enable cross training
             seed = self._seed.randint(0, 10e8)
             if len(cross) == 1: # create cross iteration
-                cross_it = i.iter(batch, shuffle=shuffle,
+                cross_it = cross[0].iter(batch, shuffle=shuffle,
                                   seed=seed, mode=self._iter_mode)
             else:
                 cross_it = zip(*[i.iter(batch, shuffle=shuffle,
@@ -1924,7 +1924,7 @@ class trainer(object):
                     except StopIteration:
                         seed = self._seed.randint(0, 10e8)
                         if len(cross) == 1: # recreate cross iteration
-                            cross_it = i.iter(batch, shuffle=shuffle,
+                            cross_it = cross[0].iter(batch, shuffle=shuffle,
                                               seed=seed, mode=self._iter_mode)
                         else:
                             cross_it = zip(*[i.iter(batch, shuffle=shuffle,
