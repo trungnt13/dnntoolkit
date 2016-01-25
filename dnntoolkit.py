@@ -1621,6 +1621,8 @@ class trainer(object):
         self._cross_data = None
         self._pcross = 0.3
 
+        self._iter_mode = 0
+
     # ==================== Trigger Command ==================== #
     def stop(self):
         ''' Stop current activity of this trainer immediatelly '''
@@ -1646,6 +1648,19 @@ class trainer(object):
     def set_log(self, enable=True, newline=False):
         self._log_enable = enable
         self._log_newline = newline
+
+    def set_iter_mode(self, mode):
+        '''
+        mode : 0, 1, 2
+            0 - default, sequentially read each dataset
+            1 - parallel read: equally read each dataset, upsampling
+                smaller dataset (e.g. batch_size=512, there are 5 dataset
+                => each dataset 102 samples) (only work if batch size <<
+                dataset size)
+            2 - parallel read: proportionately for each dataset (e.g. batch_size=512,
+                dataset1_size=1000, dataset2_size=500 => ds1=341, ds2=170)
+        '''
+        self._iter_mode = mode
 
     def set_dataset(self, data, train=None, valid=None,
         test=None, cross=None, pcross=None):
@@ -1674,6 +1689,7 @@ class trainer(object):
         Note
         ----
         the order of train, valid, test must be the same in model function
+        any None input will be ignored
         '''
         if isinstance(data, str):
             data = dataset(data, mode='r')
@@ -1882,24 +1898,41 @@ class trainer(object):
         return batches
 
     def _create_iter(self, data, batch, shuffle, cross=None, pcross=0.3):
-        ''' data: is [dnntoolkit.batch] instance'''
+        ''' data: is [dnntoolkit.batch] instance, always a list
+            cross: is [dnntoolkit.batch] instance, always a list
+        '''
         seed = self._seed.randint(0, 10e8)
-        data = [i.iter(batch, shuffle=shuffle, seed=seed) for i in data]
-        if cross:
+        data = [i.iter(batch, shuffle=shuffle, seed=seed, mode=self._iter_mode)
+                for i in data]
+        if len(data) == 1:
+            iter_data = data[0]
+        else:
+            iter_data = zip(*data)
+        if cross: # enable cross training
             seed = self._seed.randint(0, 10e8)
-            cross_it = zip(*[i.iter(batch, shuffle=shuffle, seed=seed)
-                             for i in cross])
-            for d in zip(*data):
+            if len(cross) == 1: # create cross iteration
+                cross_it = i.iter(batch, shuffle=shuffle,
+                                  seed=seed, mode=self._iter_mode)
+            else:
+                cross_it = zip(*[i.iter(batch, shuffle=shuffle,
+                                    seed=seed, mode=self._iter_mode)
+                                 for i in cross])
+            for d in iter_data:
                 if random.random() < pcross:
                     try:
                         yield cross_it.next()
-                    except StopIteration: # recreate cross iter
+                    except StopIteration:
                         seed = self._seed.randint(0, 10e8)
-                        cross_it = zip(*[i.iter(batch, shuffle=shuffle, seed=seed)
-                                         for i in cross])
+                        if len(cross) == 1: # recreate cross iteration
+                            cross_it = i.iter(batch, shuffle=shuffle,
+                                              seed=seed, mode=self._iter_mode)
+                        else:
+                            cross_it = zip(*[i.iter(batch, shuffle=shuffle,
+                                                seed=seed, mode=self._iter_mode)
+                                             for i in cross])
                 yield d
-        else:
-            for d in zip(*data):
+        else: # only normal training
+            for d in iter_data:
                 yield d
 
     def _finish_train(self, train_cost, restart=False):
@@ -1928,7 +1961,11 @@ class trainer(object):
 
         # convert name and ndarray to [dnntoolkit.batch] object
         valid_data = self._check_dataset(valid_data)
-        n_samples = valid_data[0].shape[0]
+        # find n_samples
+        n_samples = [len(i) for i in valid_data if hasattr(i, '__len__')]
+        if len(n_samples) == 0: n_samples = 10e8
+        else: n_samples = max(n_samples)
+        # init some things
         valid_cost = []
         n = 0
         it = 0
@@ -1988,13 +2025,14 @@ class trainer(object):
         it = 0
         # convert name and ndarray to [dnntoolkit.batch] object
         train_data = self._check_dataset(train_data)
-        if cross: cross = self._check_dataset(cross)
-
-        ntrain = train_data[0].shape[0]
-        if validfreq < 1.0: # validate validfreq
-            validfreq = int(max(validfreq * ntrain / batch, 1))
-        train_cost = []
+        if cross:
+            cross = self._check_dataset(cross)
+        # get n_samples in training
+        ntrain = [len(i) for i in train_data if hasattr(i, '__len__')]
+        if len(ntrain) == 0: ntrain = 20 * batch
+        else: ntrain = ntrain[0]
         # ====== start ====== #
+        train_cost = []
         for i in xrange(epoch):
             self.epoch = i
             self.iter = it
@@ -2008,7 +2046,7 @@ class trainer(object):
                                           cross, pcross):
                 # start batch
                 n += data[0].shape[0]
-                it += 1
+                ntrain = max(ntrain, n)
                 self.data = data
                 self.iter = it
                 self._batch_start(self) # callback
@@ -2036,13 +2074,15 @@ class trainer(object):
                     return self._finish_train(train_cost, self._early_restart())
 
                 # validation
-                if (it > 0 and it % validfreq == 0) or self._early_valid():
+                if validfreq < 1.0: # must update valid freq
+                    validfreq = int(max(validfreq * ntrain / batch, 1))
+                it += 1 # finish 1 iteration
+                if (it % validfreq == 0) or self._early_valid():
                     if valid_data is not None:
                         self._cost('valid', valid_data, batch)
                         if self._early_stop(): # earlystop
                             return self._finish_train(train_cost, self._early_restart())
                     self.task = 'train' # restart flag back to train
-
             # ====== end epoch: statistic of epoch cost ====== #
             self.cost = epoch_cost
             self.iter = it
@@ -2184,6 +2224,8 @@ class trainer(object):
 # ======================================================================
 def create_batch(n_samples, batch_size, start=None, end=None, prng=None, upsample=None):
     '''
+    No gaurantee that this methods will return the extract batch_size
+
     Parameters
     ----------
     n_samples : int
