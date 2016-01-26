@@ -35,9 +35,11 @@ import math
 import random
 import time
 import warnings
+import types
 from stat import S_ISDIR
 
 import itertools
+import six
 from six.moves import zip, zip_longest
 from collections import OrderedDict, defaultdict
 
@@ -279,16 +281,116 @@ class io():
         return file_list
 
     @staticmethod
-    def find_in_module(module, identifier):
-        import six
+    def get_from_module(module, identifier, environment=None):
+        '''
+        Parameters
+        ----------
+        module : ModuleType, str
+            module contain the identifier
+        identifier : str
+            str, name of identifier
+        environment : map
+            map from globals() or locals()
+
+        Returns
+        -------
+        object : with the same name as identifier
+        None : not found
+        '''
         if isinstance(module, six.string_types):
-            module = globals()[module]
+            if environment and module in environment:
+                module = environment[module]
+            elif module in globals():
+                module = globals()[module]
+            else:
+                return None
 
         from inspect import getmembers
         for i in getmembers(module):
             if identifier in i:
                 return i[1]
         return None
+
+    @staticmethod
+    def search_id(identifier, prefix='', suffix='', path='.', exclude='',
+                  prefer_compiled=False):
+        ''' Algorithms:
+         - Search all files in the `path` matched `prefix` and `suffix`
+         - Exclude all files contain any str in `exclude`
+         - Sorted all files based on alphabet
+         - Load all modules based on `prefer_compiled`
+         - return list of identifier found in all modules
+
+        Parameters
+        ----------
+        identifier : str
+            identifier of object, function or anything in script files
+        prefix : str
+            prefix of file to search in the `path`
+        suffix : str
+            suffix of file to search in the `path`
+        path : str
+            searching path of script files
+        exclude : str, list(str)
+            any files contain str in this list will be excluded
+        prefer_compiled : bool
+            True mean prefer .pyc file, otherwise prefer .py
+
+        Returns
+        -------
+        list(object, function, ..) :
+            any thing match given identifier in all found script file
+
+        Notes
+        -----
+        File with multiple . character my procedure wrong results
+        If the script run this this function match the searching process, a
+        infinite loop may happen!
+        '''
+        import re
+        import imp
+        from inspect import getmembers
+        # ====== validate input ====== #
+        if exclude == '': exclude = []
+        if type(exclude) not in (list, tuple, np.ndarray):
+            exclude = [exclude]
+        prefer_flag = -1
+        if prefer_compiled: prefer_flag = 1
+        # ====== create pattern and load files ====== #
+        pattern = re.compile('^%s.*%s\.pyc?' % (prefix, suffix)) # py or pyc
+        files = os.listdir(path)
+        files = [f for f in files
+                 if pattern.match(f) and
+                 sum([i in f for i in exclude]) == 0]
+        # ====== remove duplicated pyc files ====== #
+        files = sorted(files, key=lambda x: prefer_flag * len(x)) # pyc is longer
+        # .pyc go first get overrided by .py
+        files = sorted({f.split('.')[0]:f for f in files}.values())
+
+        # ====== load all modules ====== #
+        modules = []
+        for f in files:
+            try:
+                if '.pyc' in f:
+                    modules.append(
+                            imp.load_compiled(f.split('.')[0],
+                                              os.path.join(path, f))
+                        )
+                else:
+                    modules.append(
+                            imp.load_source(f.split('.')[0],
+                                            os.path.join(path, f))
+                        )
+            except:
+                pass
+        # ====== Find all identifier in modules ====== #
+        ids = []
+        for m in modules:
+            for i in getmembers(m):
+                if identifier in i:
+                    ids.append(i[1])
+        # remove duplicate py
+        return ids
 
 # ===========================================================================
 # Statistic
@@ -1004,7 +1106,6 @@ def serialize_sandbox(environment):
     -------
     dictionary : cPickle dumps-able dictionary to store as text
     '''
-    import types
     import re
     sys_module = re.compile('__\w+__')
     primitive = (bool, int, float, str,
@@ -1028,7 +1129,6 @@ def deserialize_sandbox(sandbox):
     if not isinstance(sandbox, dict):
         raise ValueError(
             '[environment] must be dictionary created by serialize_sandbox')
-    import types
     import importlib
     primitive = (bool, int, float, str,
                  tuple, list, dict, type, types.ModuleType)
@@ -1460,7 +1560,6 @@ class model(object):
             return m
         import cPickle
         import marshal
-        import types
 
         m = model()
         m._save_path = path
@@ -1568,8 +1667,11 @@ def _parse_data_config(task, data):
 class trainer(object):
 
     """
-    TODO: custom data (not instance of dataset), cross training 2 dataset,
-    custome action trigger under certain condition
+    TODO:
+     - custom data (not instance of dataset),
+     - cross training 2 dataset,
+     - custom action trigger under certain condition
+     - layers configuration: ['dropout':0.5, 'noise':'0.075']
     Value can be queried on callback:
      - idx(int): current run idx in the strategies, start from 0
      - cost: current training, testing, validating cost
