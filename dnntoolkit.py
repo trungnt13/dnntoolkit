@@ -848,6 +848,16 @@ class dnn():
                       maxval)
         return np.cast[theano.config.floatX](l2value)
 
+    @staticmethod
+    def calc_lstm_weights(n_in, n_units, peephole=True):
+        b = n_units * 3
+        w_in = n_in * n_units * 4
+        w_hid = n_units * n_units * 4
+        w_cell = 0
+        if peephole:
+            w_cell = n_units * n_units * 3
+            b += n_units
+        return b + w_in + w_hid + w_cell
 # ===========================================================================
 # Model
 # ===========================================================================
