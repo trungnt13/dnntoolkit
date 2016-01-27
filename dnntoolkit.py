@@ -829,7 +829,7 @@ class dnn():
         return False
 
     @staticmethod
-    def calc_weights_decay(nparams, maxval=0.1):
+    def est_weights_decay(nparams, maxval=0.1):
         '''
             10^{log10(1/sqrt(nparams))}
         '''
@@ -838,12 +838,13 @@ class dnn():
         return np.cast[theano.config.floatX](l2value / 2)
 
     @staticmethod
-    def calc_lr(nparams, nlayers, maxval=0.1):
+    def est_lr(nparams, nlayers, maxval=0.1):
         '''
             10^{log10(1/sqrt(nparams))}
         '''
         nparams *= np.sqrt(nlayers)
-        l2value = min(10**np.log10(1. / np.sqrt(nparams)),
+        # very heuristic value
+        l2value = min(10**np.log10(1. / nparams**(1/2.4)),
                       maxval)
         return np.cast[theano.config.floatX](l2value)
 
@@ -1672,6 +1673,7 @@ class trainer(object):
      - cross training 2 dataset,
      - custom action trigger under certain condition
      - layers configuration: ['dropout':0.5, 'noise':'0.075']
+     - default ArgumentsParser
     Value can be queried on callback:
      - idx(int): current run idx in the strategies, start from 0
      - cost: current training, testing, validating cost
