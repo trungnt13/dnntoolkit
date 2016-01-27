@@ -835,7 +835,7 @@ class dnn():
         '''
         l2value = min(10**np.log10(1. / np.sqrt(nparams)),
                       maxval)
-        return np.cast[theano.config.floatX](l2value / 2)
+        return np.cast[theano.config.floatX](l2value)
 
     @staticmethod
     def calc_lr(nparams, nlayers, maxval=0.1):
