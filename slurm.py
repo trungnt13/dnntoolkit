@@ -74,7 +74,7 @@ source deactivate
 # ======================================================================
 # Interactive
 # ======================================================================
-#srun -N 1 -p gputest -t 15 --gres=gpu:2 --pty $SHELL -l
+#srun -N 1 -p gputest -t 15 --gres=gpu:2 --exclusive --pty $SHELL -l
 def igpu(t=30, n=1, mem=15000):
     arch = 'gpu'
     if t <= 15:
