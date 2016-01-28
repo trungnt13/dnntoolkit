@@ -3179,40 +3179,7 @@ class visual():
         return axis
 
     @staticmethod
-    def plot_spectrogram(s, fs=8000, ax=None, colormap = "jet", path=None):
-        '''
-        Example
-        -------
-        >>> fig = plt.figure()
-        >>> ax = fig.add_subplot(2, 1, 1)
-        >>> ax.specgram(s, Fs=8000, NFFT=256)
-        >>> ax = fig.add_subplot(2, 1, 2)
-        >>> dnntoolkit.visual.plot_spectrogram(t, ax)
-        >>> plt.show()
-
-        '''
-        from matplotlib import pyplot as plt
-        if colormap is None:
-            colormap = plt.cm.Blues
-
-        if hasattr(s, 'flatten'):
-            s = s.flatten()
-        s = speech.spectrogram(s, fs, normalize=False, vad=False)
-        s = 20. * np.log10(np.abs(s) / 10e-6) # amplitude to decibel
-
-        ax = ax if ax is not None else plt.gca()
-        img = ax.imshow(s, cmap=colormap, interpolation='bilinear',
-            origin="lower", aspect="auto")
-        plt.colorbar(img, ax=ax)
-        plt.xlabel("time (#)")
-        plt.ylabel("frequency (hz)")
-
-        if path:
-            plt.savefig(path, dpi=300, format='png', bbox_inches='tight')
-        return ax
-
-    @staticmethod
-    def plot_weights(x, ax=None, colormap = "Greys", colorbar=False, path=None):
+    def plot_weights(x, ax=None, colormap = "Greys", colorbar=False, path=None, keep_aspect=True):
         '''
         Parameters
         ----------
@@ -3259,7 +3226,8 @@ class visual():
             x = x[:, None]
 
         ax = ax if ax is not None else plt.gca()
-        ax.set_aspect('equal', 'box')
+        if keep_aspect:
+            ax.set_aspect('equal', 'box')
         # ax.tick_params(axis='both', which='major', labelsize=6)
         ax.set_xticks([])
         ax.set_yticks([])
