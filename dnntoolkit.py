@@ -2711,8 +2711,7 @@ class batch(object):
             prng1 = RandomState(seed)
             prng2 = RandomState(seed)
 
-        batches = create_batch(ds.shape[0], batch_size,
-            start, end, prng1)
+        batches = create_batch(ds.shape[0], batch_size, start, end, prng1)
         prng2.shuffle(batches)
         for i, j in batches:
             data = ds[i:j]
@@ -2785,7 +2784,6 @@ class batch(object):
                 tmp.append((idx, (start, end + 1)))
                 all_block_batch.append(tmp)
         prng2.shuffle(all_block_batch)
-        print(all_block_batch)
         # print if you want debug
         # for _ in all_block_batch:
         #     for i, j in _:
