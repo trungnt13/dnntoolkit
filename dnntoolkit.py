@@ -2336,7 +2336,8 @@ class trainer(object):
 # ======================================================================
 # Data Preprocessing
 # ======================================================================
-def create_batch(n_samples, batch_size, start=None, end=None, prng=None, upsample=None):
+def create_batch(n_samples, batch_size,
+    start=None, end=None, prng=None, upsample=None, keep_size=False):
     '''
     No gaurantee that this methods will return the extract batch_size
 
@@ -2389,10 +2390,17 @@ def create_batch(n_samples, batch_size, start=None, end=None, prng=None, upsampl
 
     if upsample is None or upsample < n_samples:
         upsample = n_samples
-    else:
-        upsample = int(upsample * float(n_samples) / orig_n_samples) # rescale
+    else: # rescale
+        upsample = int(upsample * float(n_samples) / orig_n_samples)
     #####################################
     # 2. Init.
+    jobs = []
+    n_batch = n_samples / batch_size
+    for i in xrange(int(n_batch)):
+        jobs.append(start + i*batch_size, start + (i + 1) * batch_size)
+    jobs.append(start + (i + 1) * batch_size, end)
+    return jobs
+
     idx = range(start, end)
     n_batch = max(int(math.floor(n_samples / batch_size)), 1)
     jobs = mpi.segment_job(idx, n_batch)
