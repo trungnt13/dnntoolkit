@@ -2395,16 +2395,17 @@ def create_batch(n_samples, batch_size,
     #####################################
     # 2. Init.
     jobs = []
-    n_batch = n_samples / batch_size
+    n_batch = float(n_samples / batch_size)
+    if n_batch < 1 and keep_size:
+        raise ValueError('Cannot keep size when number of data < batch size')
+    i = -1
     for i in xrange(int(n_batch)):
-        jobs.append(start + i*batch_size, start + (i + 1) * batch_size)
-    jobs.append(start + (i + 1) * batch_size, end)
-    return jobs
-
-    idx = range(start, end)
-    n_batch = max(int(math.floor(n_samples / batch_size)), 1)
-    jobs = mpi.segment_job(idx, n_batch)
-    jobs = [(j[0], j[-1] + 1) for j in jobs if len(j) > 0]
+        jobs.append((start + i*batch_size, start + (i + 1) * batch_size))
+    if not n_batch.is_integer():
+        if keep_size:
+            jobs.append((end - batch_size, end))
+        else:
+            jobs.append((start + (i + 1) * batch_size, end))
 
     #####################################
     # 3. Upsample jobs.
@@ -2418,11 +2419,11 @@ def create_batch(n_samples, batch_size,
             i += 1
         elif prng is not None:
             added_job = jobs[prng.randint(0, len(jobs))]
-        # remove redundant size
         tmp = added_job[1] - added_job[0]
-        if n + tmp > upsample:
-            tmp = n + tmp - upsample
-            added_job = (added_job[0], added_job[1] - tmp)
+        if not keep_size: # only remove redundant size if not keep_size
+            if n + tmp > upsample:
+                tmp = n + tmp - upsample
+                added_job = (added_job[0], added_job[1] - tmp)
         n += added_job[1] - added_job[0]
         # done
         upsample_jobs.append(added_job)
@@ -2735,19 +2736,20 @@ class batch(object):
         # ====== Calculate batch_size ====== #
         if mode == 1:
             maxsize = max(all_size)
-            all_batch_size = \
-                [int(math.ceil(batch_size / n_dataset)) for i in xrange(n_dataset)]
+            all_batch_size = [int(batch_size / n_dataset) for i in xrange(n_dataset)]
+            for i in xrange(batch_size - sum(all_batch_size)): # not enough
+                all_batch_size[i] += 1
             all_upsample = [maxsize for i in xrange(n_dataset)]
         elif mode == 2:
             s = sum(all_size)
-            all_batch_size = \
-                [int(math.ceil(batch_size * float(i / s))) for i in all_size]
+            all_batch_size = [int(round(batch_size * i / s)) for i in all_size]
+            if sum(all_batch_size) > batch_size: # 0.5% -> round up, too much
+                all_batch_size[0] -= 1
             all_upsample = [None] * len(all_size)
         else:
             all_batch_size = [batch_size]
             all_upsample = [None]
             all_size = [sum(all_size)]
-
         # ====== Create all block and batches ====== #
         # [ ((idx1, batch1), (idx2, batch2), ...), # batch 1
         #   ((idx1, batch1), (idx2, batch2), ...), # batch 2
@@ -2758,7 +2760,6 @@ class batch(object):
         for n, batchsize, upsample in zip(all_size, all_batch_size, all_upsample):
             tmp_block_batch.append(
                 create_batch(n, batchsize, start, end, prng1, upsample))
-
         # ====== Distribute block and batches ====== #
         if mode == 1 or mode == 2:
             for i in zip_longest(*tmp_block_batch):
@@ -2784,6 +2785,7 @@ class batch(object):
                 tmp.append((idx, (start, end + 1)))
                 all_block_batch.append(tmp)
         prng2.shuffle(all_block_batch)
+        print(all_block_batch)
         # print if you want debug
         # for _ in all_block_batch:
         #     for i, j in _:
@@ -2801,6 +2803,7 @@ class batch(object):
         ''' Create iteration for all dataset contained in this _batch
         When [start] and [end] are given, it mean appying for each dataset
         If the amount of data between [start] and [end] < 1.0
+
         Parameters
         ----------
         batch_size : int, 'auto'
