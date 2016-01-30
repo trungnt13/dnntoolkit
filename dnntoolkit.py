@@ -838,6 +838,16 @@ class dnn():
         return np.cast[theano.config.floatX](l2value / 2)
 
     @staticmethod
+    def est_maxnorm(nparams, maxval=1000.):
+        '''
+            10^{log10(1/sqrt(nparams))}
+        '''
+        pivot = nparams*10e-5
+        log10 = 10**int(np.log10(pivot))
+        point = np.ceil(pivot / log10)
+        return min(maxval, np.cast[theano.config.floatX](point * log10))
+
+    @staticmethod
     def est_lr(nparams, nlayers, maxval=0.1):
         '''
             10^{log10(1/sqrt(nparams))}
