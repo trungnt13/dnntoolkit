@@ -3810,11 +3810,11 @@ class speech():
         # cluster_id
         fixed_label = label.replace('por-brz', 'spa-brz')
         for i, j in enumerate(speech.nist15_cluster_lang.keys()):
-            if j in fixed_label:
+            if j + '-' in fixed_label:
                 rval[1] = i
                 break
         # special case for por cluster
-        if rval[1] is None and 'por' in fixed_label: rval[1] = 5
+        if rval[1] is None and 'por-' in fixed_label: rval[1] = 5
         # within_cluster_id
         for i in speech.nist15_within_cluster.keys():
             if i in label:
