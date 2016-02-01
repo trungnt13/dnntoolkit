@@ -854,7 +854,7 @@ class dnn():
         '''
         nparams *= np.sqrt(nlayers)
         # very heuristic value
-        l2value = min(10**np.log10(1. / nparams**(1/2.1)), maxval)
+        l2value = min(10**np.log10(1. / nparams**(1/2.03)), maxval)
         return np.cast[theano.config.floatX](l2value)
 
     @staticmethod
