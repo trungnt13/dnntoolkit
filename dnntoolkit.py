@@ -833,7 +833,7 @@ class dnn():
         '''
             10^{log10(1/sqrt(nparams))}
         '''
-        l2value = min(10**np.log10(1. / np.sqrt(nparams)),
+        l2value = min(10**np.log10(1. / nparams**(1 / 2.5)),
                       maxval)
         return np.cast[theano.config.floatX](l2value / 2)
 
