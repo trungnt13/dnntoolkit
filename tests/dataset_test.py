@@ -413,20 +413,20 @@ class DatasetTest(unittest.TestCase):
             self.assertEqual(X.shape, Y.shape)
 
             # check order
-            tmp = (X[:] + Y[:]).tolist()
+            tmp = (X[:] + Y[:]).ravel().tolist()
             self.assertEqual(tmp, [0.] * len(tmp))
 
             # check order
-            tmp = (list(X.iter(7, 0., 1., True, mode=0)) +
-                   list(Y.iter(7, 0., 1., True, mode=0))).tolist()
+            tmp = (np.concatenate(list(X.iter(7, 0., 1., True, mode=0)), 0) +
+                   np.concatenate(list(Y.iter(7, 0., 1., True, mode=0)), 0)).ravel().tolist()
             self.assertEqual(tmp, [0.] * len(tmp))
 
-            tmp = (list(X.iter(7, 0., 1., True, mode=1)) +
-                   list(Y.iter(7, 0., 1., True, mode=1))).tolist()
+            tmp = (np.concatenate(list(X.iter(7, 0., 1., True, mode=1)), 0) +
+                   np.concatenate(list(Y.iter(7, 0., 1., True, mode=1)), 0)).ravel().tolist()
             self.assertEqual(tmp, [0.] * len(tmp))
 
-            tmp = (list(X.iter(7, 0., 1., True, mode=2)) +
-                   list(Y.iter(7, 0., 1., True, mode=2))).tolist()
+            tmp = (np.concatenate(list(X.iter(7, 0., 1., True, mode=2)), 0) +
+                   np.concatenate(list(Y.iter(7, 0., 1., True, mode=2)), 0)).ravel().tolist()
             self.assertEqual(tmp, [0.] * len(tmp))
 
             tmp = []
@@ -446,8 +446,9 @@ class DatasetTest(unittest.TestCase):
                              Y.iter(7, 0., 1., True, mode=2)):
                 tmp += (i + j).ravel().tolist()
             self.assertEqual(tmp, [0.] * len(tmp))
-        except:
-            pass
+        except Exception, e:
+            import traceback; traceback.print_exc();
+            raise e
         finally:
             if os.path.exists('test1.ds'):
                 os.remove('test1.ds')
