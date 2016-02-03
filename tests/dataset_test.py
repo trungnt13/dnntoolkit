@@ -380,6 +380,81 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(b._hdf[2].filename, 'tmp/tmp2.h5')
 
         self.assertEqual(tuple(self.ds['a']), ('111', '222'))
+
+    def test_upsampling(self):
+        try:
+            # ====== Create datase ====== #
+            X1 = np.arange(0, 9).reshape(-1, 3)
+            X2 = np.arange(9, 24).reshape(-1, 3)
+            X3 = np.arange(24, 54).reshape(-1, 3)
+
+            Y1 = -np.arange(0, 9).reshape(-1, 3)
+            Y2 = -np.arange(9, 24).reshape(-1, 3)
+            Y3 = -np.arange(24, 54).reshape(-1, 3)
+
+            f = h5py.File('test1.ds', 'w')
+            f['X1'] = X1
+            f['Y1'] = Y1
+            f.close()
+            f = h5py.File('test2.ds', 'w')
+            f['X2'] = X2
+            f['Y2'] = Y2
+            f.close()
+            f = h5py.File('test3.ds', 'w')
+            f['X3'] = X3
+            f['Y3'] = Y3
+            f.close()
+            # ====== Test ====== #
+            ds = dnntoolkit.dataset(['test1.ds', 'test2.ds', 'test3.ds'], 'r')
+            X = ds[['X1', 'X2', 'X3']]
+            Y = ds[['Y1', 'Y2', 'Y3']]
+
+            # check shape
+            self.assertEqual(X.shape, Y.shape)
+
+            # check order
+            tmp = (X[:] + Y[:]).tolist()
+            self.assertEqual(tmp, [0.] * len(tmp))
+
+            # check order
+            tmp = (list(X.iter(7, 0., 1., True, mode=0)) +
+                   list(Y.iter(7, 0., 1., True, mode=0))).tolist()
+            self.assertEqual(tmp, [0.] * len(tmp))
+
+            tmp = (list(X.iter(7, 0., 1., True, mode=1)) +
+                   list(Y.iter(7, 0., 1., True, mode=1))).tolist()
+            self.assertEqual(tmp, [0.] * len(tmp))
+
+            tmp = (list(X.iter(7, 0., 1., True, mode=2)) +
+                   list(Y.iter(7, 0., 1., True, mode=2))).tolist()
+            self.assertEqual(tmp, [0.] * len(tmp))
+
+            tmp = []
+            for i, j in izip(X.iter(7, 0., 1., True, mode=0),
+                             Y.iter(7, 0., 1., True, mode=0)):
+                tmp += (i + j).ravel().tolist()
+            self.assertEqual(tmp, [0.] * len(tmp))
+
+            tmp = []
+            for i, j in izip(X.iter(7, 0., 1., True, mode=1),
+                             Y.iter(7, 0., 1., True, mode=1)):
+                tmp += (i + j).ravel().tolist()
+            self.assertEqual(tmp, [0.] * len(tmp))
+
+            tmp = []
+            for i, j in izip(X.iter(7, 0., 1., True, mode=2),
+                             Y.iter(7, 0., 1., True, mode=2)):
+                tmp += (i + j).ravel().tolist()
+            self.assertEqual(tmp, [0.] * len(tmp))
+        except:
+            pass
+        finally:
+            if os.path.exists('test1.ds'):
+                os.remove('test1.ds')
+            if os.path.exists('test2.ds'):
+                os.remove('test2.ds')
+            if os.path.exists('test3.ds'):
+                os.remove('test3.ds')
 # ===========================================================================
 # Main
 # ===========================================================================

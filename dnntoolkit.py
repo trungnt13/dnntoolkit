@@ -2154,7 +2154,8 @@ class trainer(object):
         if cross:
             cross = self._check_dataset(cross)
         # get n_samples in training
-        ntrain = [len(i) for i in train_data if hasattr(i, '__len__')]
+        ntrain = [i.iter_len(self._iter_mode) for i in train_data
+                  if hasattr(i, 'iter_len')]
         if len(ntrain) == 0: ntrain = 20 * batch
         else: ntrain = ntrain[0]
         # ====== start ====== #
