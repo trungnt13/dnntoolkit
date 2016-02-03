@@ -1334,10 +1334,8 @@ class model(object):
                     f.close()
         return self._model
 
-    def pred(self, *X):
-        '''
-        Order of input will be keep in the same order when you create network
-        '''
+    def create_pred(self):
+        ''' Create prediction funciton '''
         self.create_model()
 
         # ====== Create prediction function ====== #
@@ -1356,6 +1354,12 @@ class model(object):
                 logger.critical('*** Successfully create prediction function ***')
             else:
                 warnings.warn('NOT support API!', RuntimeWarning)
+
+    def pred(self, *X):
+        '''
+        Order of input will be keep in the same order when you create network
+        '''
+        self.create_pred()
 
         # ====== Check ====== #
         if self._pred is None:
