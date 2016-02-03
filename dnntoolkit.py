@@ -2215,7 +2215,9 @@ class trainer(object):
                     try:
                         validfreq = int(max(validfreq * ntrain / batch, 1))
                     except:
+                        print()
                         print(validfreq, ntrain, batch)
+                        exit()
                 it += 1 # finish 1 iteration
                 if (it % validfreq == 0) or self._early_valid():
                     if valid_data is not None:
