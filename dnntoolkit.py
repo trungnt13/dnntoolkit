@@ -1774,6 +1774,7 @@ class trainer(object):
 
     def set_iter_mode(self, mode):
         '''
+        ONly for training, for validation and testing mode = 0
         mode : 0, 1, 2
             0 - default, sequentially read each dataset
             1 - parallel read: equally read each dataset, upsampling
@@ -2021,12 +2022,12 @@ class trainer(object):
                 batches.append(self._dataset[i])
         return batches
 
-    def _create_iter(self, data, batch, shuffle, cross=None, pcross=0.3):
+    def _create_iter(self, data, batch, shuffle, mode, cross=None, pcross=0.3):
         ''' data: is [dnntoolkit.batch] instance, always a list
             cross: is [dnntoolkit.batch] instance, always a list
         '''
         seed = self._seed.randint(0, 10e8)
-        data = [i.iter(batch, shuffle=shuffle, seed=seed, mode=self._iter_mode)
+        data = [i.iter(batch, shuffle=shuffle, seed=seed, mode=mode)
                 for i in data]
         # handle case that 1 batch return all data
         if len(data) == 1:
@@ -2037,10 +2038,10 @@ class trainer(object):
             seed = self._seed.randint(0, 10e8)
             if len(cross) == 1: # create cross iteration
                 cross_it = cross[0].iter(batch, shuffle=shuffle,
-                                  seed=seed, mode=self._iter_mode)
+                                  seed=seed, mode=mode)
             else:
                 cross_it = zip(*[i.iter(batch, shuffle=shuffle,
-                                    seed=seed, mode=self._iter_mode)
+                                    seed=seed, mode=mode)
                                  for i in cross])
             for d in iter_data:
                 if random.random() < pcross:
@@ -2050,10 +2051,10 @@ class trainer(object):
                         seed = self._seed.randint(0, 10e8)
                         if len(cross) == 1: # recreate cross iteration
                             cross_it = cross[0].iter(batch, shuffle=shuffle,
-                                              seed=seed, mode=self._iter_mode)
+                                              seed=seed, mode=mode)
                         else:
                             cross_it = zip(*[i.iter(batch, shuffle=shuffle,
-                                                seed=seed, mode=self._iter_mode)
+                                                seed=seed, mode=mode)
                                              for i in cross])
                 yield d
         else: # only normal training
@@ -2094,7 +2095,7 @@ class trainer(object):
         valid_cost = []
         n = 0
         it = 0
-        for data in self._create_iter(valid_data, batch, False):
+        for data in self._create_iter(valid_data, batch, False, 0):
             # batch start
             it += 1
             n += data[0].shape[0]
@@ -2168,6 +2169,7 @@ class trainer(object):
             n = 0
             # ====== start batches ====== #
             for data in self._create_iter(train_data, batch, shuffle,
+                                          self._iter_mode,
                                           cross, pcross):
                 # start batch
                 n += data[0].shape[0]
