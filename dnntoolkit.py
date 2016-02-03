@@ -2010,7 +2010,8 @@ class trainer(object):
         '''
         batches = []
         for i in data:
-            if isinstance(i, np.ndarray):
+            if (type(i) in (tuple, list) and isinstance(i[0], np.ndarray)) or \
+                isinstance(i, np.ndarray):
                 batches.append(batch(arrays=i))
             elif isinstance(i, batch):
                 batches.append(i)
@@ -2027,6 +2028,7 @@ class trainer(object):
         seed = self._seed.randint(0, 10e8)
         data = [i.iter(batch, shuffle=shuffle, seed=seed, mode=self._iter_mode)
                 for i in data]
+        # handle case that 1 batch return all data
         if len(data) == 1:
             iter_data = data[0]
         else:
