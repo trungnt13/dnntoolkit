@@ -446,6 +446,25 @@ class DatasetTest(unittest.TestCase):
                              Y.iter(7, 0., 1., True, mode=2)):
                 tmp += (i + j).ravel().tolist()
             self.assertEqual(tmp, [0.] * len(tmp))
+
+            tmp = []
+            for i, j in izip(X.iter(7, 0.3, 0.6, True, mode=0),
+                             Y.iter(7, 0.3, 0.6, True, mode=0)):
+                tmp += (i + j).ravel().tolist()
+            self.assertEqual(tmp, [0.] * len(tmp))
+
+            tmp = []
+            for i, j in izip(X.iter(7, 0.5, 0.8, True, mode=1),
+                             Y.iter(7, 0.5, 0.8, True, mode=1)):
+                tmp += (i + j).ravel().tolist()
+            self.assertEqual(tmp, [0.] * len(tmp))
+
+            tmp = []
+            for i, j in izip(X.iter(7, 0.5, 0.8, True, mode=2),
+                             Y.iter(7, 0.5, 0.8, True, mode=2)):
+                tmp += (i + j).ravel().tolist()
+            self.assertEqual(tmp, [0.] * len(tmp))
+
         except Exception, e:
             import traceback; traceback.print_exc();
             raise e

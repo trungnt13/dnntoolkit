@@ -2158,6 +2158,9 @@ class trainer(object):
                   if hasattr(i, 'iter_len')]
         if len(ntrain) == 0: ntrain = 20 * batch
         else: ntrain = ntrain[0]
+        need_update_validfreq = False
+        if validfreq <= 1.0:
+            need_update_validfreq = True
         # ====== start ====== #
         train_cost = []
         for i in xrange(epoch):
@@ -2204,7 +2207,7 @@ class trainer(object):
                     return self._finish_train(train_cost, self._early_restart())
 
                 # validation, must update validfreq because ntrain updated also
-                if validfreq < 1.0:
+                if need_update_validfreq:
                     validfreq = int(max(validfreq * ntrain / batch, 1))
                 it += 1 # finish 1 iteration
                 if (it % validfreq == 0) or self._early_valid():
