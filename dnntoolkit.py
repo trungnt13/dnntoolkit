@@ -2212,7 +2212,10 @@ class trainer(object):
 
                 # validation, must update validfreq because ntrain updated also
                 if need_update_validfreq:
-                    validfreq = int(max(validfreq * ntrain / batch, 1))
+                    try:
+                        validfreq = int(max(validfreq * ntrain / batch, 1))
+                    except:
+                        print(validfreq, ntrain, batch)
                 it += 1 # finish 1 iteration
                 if (it % validfreq == 0) or self._early_valid():
                     if valid_data is not None:
