@@ -138,8 +138,8 @@ class BatchTest(unittest.TestCase):
         y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=True, mode=0)), 0).ravel()
         self.assertEqual(np.sum(x + y), 0.) # order is different but sum must = 0
 
-        x = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=True, mode=2)), 0).ravel()
-        y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=True, mode=2)), 0).ravel()
+        x = np.concatenate(list(X12.iter(9, start=0, end=1., shuffle=True, mode=1)), 0).ravel()
+        y = np.concatenate(list(Y12.iter(9, start=0, end=1., shuffle=True, mode=1)), 0).ravel()
         self.assertEqual(np.sum(x + y), 0.) # order is different but sum must = 0
 
         # this one only support full dataset, number of element and its value
@@ -147,7 +147,7 @@ class BatchTest(unittest.TestCase):
         start, end = 0., 1.
         seed = np.random.randint(0, 10e8, 1)
         for shuffle in (False, True):
-            for mode in (0, 2):
+            for mode in (0, 1):
                 X_ = np.concatenate(list(self.X12.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
                                 seed=seed, normalizer=None, mode=mode)), 0)
                 y_ = np.concatenate(list(self.Y.iter(batch_size=9, start=start, end=end, shuffle=shuffle,
@@ -173,11 +173,11 @@ class BatchTest(unittest.TestCase):
 
         # ====== Mode=2 ====== #
         l = np.concatenate(
-            list(self.X34.iter(batch_size=9, mode=2, shuffle=True, start=0.5, end=0.8)), 0)
+            list(self.X34.iter(batch_size=9, mode=1, shuffle=True, start=0.5, end=0.8)), 0)
         self.assertEqual(sorted(l.ravel().tolist()), range(50, 80) + range(150, 180))
 
         l = np.concatenate(
-            list(self.X34.iter(batch_size=9, mode=2, shuffle=False, start=0.5, end=0.8)), 0)
+            list(self.X34.iter(batch_size=9, mode=1, shuffle=False, start=0.5, end=0.8)), 0)
         self.assertEqual(sorted(l.ravel().tolist()), range(50, 80) + range(150, 180))
 
     def test_batch_append_duplicate(self):
@@ -240,22 +240,22 @@ class BatchTest(unittest.TestCase):
         self.assertEqual(tuple(it.ravel().tolist()),
                          tuple(tmp.ravel().tolist()))
 
-        it = np.concatenate(list(b.iter(7, shuffle=False, mode=2)), 0)
+        it = np.concatenate(list(b.iter(7, shuffle=False, mode=1)), 0)
         self.assertEqual(np.sum(it), np.sum(tmp))
         self.assertEqual(tuple([(i, j) for i, j in sp.stats.itemfreq(it.ravel())]),
                          tuple([(i, j) for i, j in sp.stats.itemfreq(tmp.ravel())]))
 
-        it = np.concatenate(list(b.iter(7, shuffle=True, mode=2)), 0)
+        it = np.concatenate(list(b.iter(7, shuffle=True, mode=1)), 0)
         self.assertEqual(np.sum(it), np.sum(tmp))
         self.assertEqual(tuple([(i, j) for i, j in sp.stats.itemfreq(it.ravel())]),
                          tuple([(i, j) for i, j in sp.stats.itemfreq(tmp.ravel())]))
 
-        it = np.concatenate(list(b.iter(7, shuffle=True, mode=2)), 0)
+        it = np.concatenate(list(b.iter(7, shuffle=True, mode=1)), 0)
         self.assertEqual(np.sum(it), np.sum(tmp))
         self.assertEqual(tuple([(i, j) for i, j in sp.stats.itemfreq(it.ravel())]),
                          tuple([(i, j) for i, j in sp.stats.itemfreq(tmp.ravel())]))
 
-        it = np.concatenate(list(b.iter(7, shuffle=True, mode=2, start=0.2, end=0.6)), 0)
+        it = np.concatenate(list(b.iter(7, shuffle=True, mode=1, start=0.2, end=0.6)), 0)
         tmp = np.asarray(
             (range(30, 40) * 2 + range(40, 50))[6:18] +
             (range(30) * 2 + range(40, 50))[14:42]).reshape(-1, 2)
@@ -266,9 +266,9 @@ class BatchTest(unittest.TestCase):
         for i in xrange(10): # stable shape for upsample
             seed = np.random.randint(0, 10e8, 2)
             it1 = np.concatenate(
-                list(b.iter(7, shuffle=True, mode=1, start=0.2, end=0.6, seed=seed[0])), 0)
+                list(b.iter(7, shuffle=True, mode=2, start=0.2, end=0.6, seed=seed[0])), 0)
             it2 = np.concatenate(
-                list(b.iter(7, shuffle=True, mode=1, start=0.2, end=0.6, seed=seed[1])), 0)
+                list(b.iter(7, shuffle=True, mode=2, start=0.2, end=0.6, seed=seed[1])), 0)
             self.assertEqual(it1.shape, it2.shape)
 
     def test_consitent_iter_hdfBatch(self):
@@ -475,6 +475,52 @@ class DatasetTest(unittest.TestCase):
                 os.remove('test2.ds')
             if os.path.exists('test3.ds'):
                 os.remove('test3.ds')
+
+    def test_downsampling(self):
+        # ====== Create datase ====== #
+        X1 = np.arange(0, 15).reshape(-1, 3)
+        X2 = np.arange(15, 45).reshape(-1, 3)
+        X3 = np.arange(45, 72).reshape(-1, 3)
+        Y1 = -np.arange(0, 15).reshape(-1, 3)
+        Y2 = -np.arange(15, 45).reshape(-1, 3)
+        Y3 = -np.arange(45, 72).reshape(-1, 3)
+        f = h5py.File('test1.ds', 'w')
+        f['X1'] = X1
+        f['Y1'] = Y1
+        f.close()
+        f = h5py.File('test2.ds', 'w')
+        f['X2'] = X2
+        f['Y2'] = Y2
+        f.close()
+        f = h5py.File('test3.ds', 'w')
+        f['X3'] = X3
+        f['Y3'] = Y3
+        f.close()
+        # ====== Test ====== #
+        ds = dnntoolkit.dataset(['test1.ds', 'test2.ds', 'test3.ds'], 'r')
+        X = ds[['X1', 'X2', 'X3']]
+        Y = ds[['Y1', 'Y2', 'Y3']]
+
+        # check order
+        tmp = (np.concatenate(list(X.iter(7, 0., 1., True, mode=3)), 0) +
+               np.concatenate(list(Y.iter(7, 0., 1., True, mode=3)), 0)).ravel().tolist()
+        self.assertEqual(tmp, [0.] * len(tmp))
+        tmp = []
+        for i, j in izip(X.iter(7, 0., 1., True, mode=3),
+                         Y.iter(7, 0., 1., True, mode=3)):
+            tmp += (i + j).ravel().tolist()
+        self.assertEqual(tmp, [0.] * len(tmp))
+        tmp = []
+        for i, j in izip(X.iter(7, 0.5, 0.8, True, mode=3),
+                         Y.iter(7, 0.5, 0.8, True, mode=3)):
+            tmp += (i + j).ravel().tolist()
+        self.assertEqual(tmp, [0.] * len(tmp))
+        if os.path.exists('test1.ds'):
+            os.remove('test1.ds')
+        if os.path.exists('test2.ds'):
+            os.remove('test2.ds')
+        if os.path.exists('test3.ds'):
+            os.remove('test3.ds')
 # ===========================================================================
 # Main
 # ===========================================================================

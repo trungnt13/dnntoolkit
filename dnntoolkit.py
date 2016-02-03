@@ -2412,7 +2412,7 @@ def create_batch(n_samples, batch_size,
     orig_n_samples = n_samples
     n_samples = end - start
 
-    if upsample is None or upsample < n_samples:
+    if upsample is None:
         upsample = n_samples
     else: # rescale
         upsample = int(upsample * float(n_samples) / orig_n_samples)
@@ -2433,8 +2433,9 @@ def create_batch(n_samples, batch_size,
 
     #####################################
     # 3. Upsample jobs.
+    upsample_mode = True if upsample >= n_samples else False
     upsample_jobs = []
-    n = n_samples
+    n = n_samples if upsample_mode else 0
     i = 0
     while n < upsample:
         # pick a package
@@ -2451,7 +2452,11 @@ def create_batch(n_samples, batch_size,
         n += added_job[1] - added_job[0]
         # done
         upsample_jobs.append(added_job)
-    return jobs + upsample_jobs
+
+    if upsample_mode:
+        return jobs + upsample_jobs
+    else:
+        return upsample_jobs
 
 def _auto_batch_size(shape):
     # This method calculate based on reference to imagenet size
@@ -2757,18 +2762,18 @@ class batch(object):
         n_dataset = len(all_ds)
 
         # ====== Calculate batch_size ====== #
-        if mode == 1:
-            maxsize = max(all_size)
-            all_batch_size = [int(batch_size / n_dataset) for i in xrange(n_dataset)]
-            for i in xrange(batch_size - sum(all_batch_size)): # not enough
-                all_batch_size[i] += 1
-            all_upsample = [maxsize for i in xrange(n_dataset)]
-        elif mode == 2:
+        if mode == 1: # equal
             s = sum(all_size)
             all_batch_size = [int(round(batch_size * i / s)) for i in all_size]
             if sum(all_batch_size) > batch_size: # 0.5% -> round up, too much
                 all_batch_size[0] -= 1
             all_upsample = [None] * len(all_size)
+        elif mode == 2 or mode == 3: # upsampling and downsampling
+            maxsize = int(max(all_size)) if mode == 2 else int(min(all_size))
+            all_batch_size = [int(batch_size / n_dataset) for i in xrange(n_dataset)]
+            for i in xrange(batch_size - sum(all_batch_size)): # not enough
+                all_batch_size[i] += 1
+            all_upsample = [maxsize for i in xrange(n_dataset)]
         else:
             all_batch_size = [batch_size]
             all_upsample = [None]
@@ -2842,12 +2847,17 @@ class batch(object):
             funciton will be applied to each batch before return
         mode : 0, 1, 2
             0 - default, sequentially read each dataset
-            1 - parallel read: equally read each dataset, upsampling
-                smaller dataset (e.g. batch_size=512, there are 5 dataset
-                => each dataset 102 samples) (only work if batch size <<
+            1 - parallel read: proportionately for each dataset (e.g.
+                batch_size=512, dataset1_size=1000, dataset2_size=500
+                => ds1=341, ds2=170)
+            2 - parallel read (upsampling): upsampling smaller dataset
+                (e.g. batch_size=512, there are 5 dataset => each dataset
+                102 samples) (only work if batch size <<
                 dataset size)
-            2 - parallel read: proportionately for each dataset (e.g. batch_size=512,
-                dataset1_size=1000, dataset2_size=500 => ds1=341, ds2=170)
+            3 - parallel read (downsampling): downsampling larger dataset
+                (e.g. batch_size=512, there are 5 dataset => each dataset
+                102 samples) (only work if batch size <<
+                dataset size)
 
         Returns
         -------
@@ -3190,7 +3200,7 @@ class visual():
     chars = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
 
     @staticmethod
-    def confusion_matrix(cm, labels, axis=None):
+    def plot_confusion_matrix(cm, labels, axis=None):
         from matplotlib import pyplot as plt
 
         title = 'Confusion matrix'
