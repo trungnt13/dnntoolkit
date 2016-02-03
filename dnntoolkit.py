@@ -2789,7 +2789,7 @@ class batch(object):
             tmp_block_batch.append(
                 create_batch(n, batchsize, start, end, prng1, upsample))
         # ====== Distribute block and batches ====== #
-        if mode == 1 or mode == 2:
+        if mode == 1 or mode == 2 or mode == 3:
             for i in zip_longest(*tmp_block_batch):
                 all_block_batch.append([(k, v) for k, v in enumerate(i) if v is not None])
         else:
