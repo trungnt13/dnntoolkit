@@ -1922,7 +1922,7 @@ class trainer(object):
             number of epoch for training (NO need for valid and test)
         batch : int, 'auto'
             number of samples for each batch
-        validfreq : int, float(0.-1.)
+        validfreq : int(number of iteration), float(0.-1.)
             validation frequency when training, when float, it mean percentage
             of dataset
         shuffle : boolean
