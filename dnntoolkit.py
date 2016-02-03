@@ -2173,6 +2173,8 @@ class trainer(object):
                                           cross, pcross):
                 # start batch
                 n += data[0].shape[0]
+                # update ntrain constantly, if iter_mode = 1, no idea how many
+                # data point in the dataset because of upsampling
                 ntrain = max(ntrain, n)
                 self.data = data
                 self.iter = it
@@ -2200,8 +2202,8 @@ class trainer(object):
                 if self._early_stop(): # earlystop
                     return self._finish_train(train_cost, self._early_restart())
 
-                # validation
-                if validfreq < 1.0: # must update valid freq
+                # validation, must update validfreq because ntrain updated also
+                if validfreq < 1.0:
                     validfreq = int(max(validfreq * ntrain / batch, 1))
                 it += 1 # finish 1 iteration
                 if (it % validfreq == 0) or self._early_valid():
@@ -2871,7 +2873,16 @@ class batch(object):
             return self._iter_slow(batch_size, start, end, shuffle, seed,
                                    mode)
 
+    def iter_len(self, mode):
+        '''This methods return estimated iteration length'''
+        self._is_dataset_init()
+        if mode == 1: #upsampling
+            maxlen = max([i.shape[0] for i in self._data])
+            return int(maxlen * len(self._data))
+        return len(self)
+
     def __len__(self):
+        ''' This method return actual len by sum all shape[0] '''
         self._is_dataset_init()
         return sum([i.shape[0] for i in self._data])
 
