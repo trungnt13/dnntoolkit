@@ -505,6 +505,9 @@ class DatasetTest(unittest.TestCase):
         tmp = (np.concatenate(list(X.iter(7, 0., 1., True, mode=3)), 0) +
                np.concatenate(list(Y.iter(7, 0., 1., True, mode=3)), 0)).ravel().tolist()
         self.assertEqual(tmp, [0.] * len(tmp))
+        self.assertEqual(
+            np.concatenate(list(X.iter(7, 0., 1., True, mode=3)), 0).shape,
+            (15, 3))
         tmp = []
         for i, j in izip(X.iter(7, 0., 1., True, mode=3),
                          Y.iter(7, 0., 1., True, mode=3)):

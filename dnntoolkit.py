@@ -2895,9 +2895,12 @@ class batch(object):
     def iter_len(self, mode):
         '''This methods return estimated iteration length'''
         self._is_dataset_init()
-        if mode == 1: #upsampling
+        if mode == 2: #upsampling
             maxlen = max([i.shape[0] for i in self._data])
             return int(maxlen * len(self._data))
+        if mode == 3: #downsampling
+            minlen = min([i.shape[0] for i in self._data])
+            return int(minlen * len(self._data))
         return len(self)
 
     def __len__(self):
