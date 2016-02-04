@@ -1697,6 +1697,7 @@ class trainer(object):
      - custom action trigger under certain condition
      - layers configuration: ['dropout':0.5, 'noise':'0.075']
      - default ArgumentsParser
+     - Add iter_mode, start, end to set_strategy
     Value can be queried on callback:
      - idx(int): current run idx in the strategies, start from 0
      - cost: current training, testing, validating cost
