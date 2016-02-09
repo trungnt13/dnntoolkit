@@ -2769,6 +2769,7 @@ class batch(object):
 
         # ====== Calculate batch_size ====== #
         if mode == 1: # equal
+            print('shittttt')
             s = sum(all_size)
             all_batch_size = [int(round(batch_size * i / s)) for i in all_size]
             if sum(all_batch_size) > batch_size: # 0.5% -> round up, too much
