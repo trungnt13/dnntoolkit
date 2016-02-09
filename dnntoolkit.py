@@ -2780,7 +2780,7 @@ class batch(object):
             for i in xrange(batch_size - sum(all_batch_size)): # not enough
                 all_batch_size[i] += 1
             all_upsample = [maxsize for i in xrange(n_dataset)]
-        else:
+        else: # sequential
             all_batch_size = [batch_size]
             all_upsample = [None]
             all_size = [sum(all_size)]
