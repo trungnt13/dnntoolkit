@@ -2789,7 +2789,6 @@ class batch(object):
             all_batch_size = [batch_size]
             all_upsample = [None]
             all_size = [sum(all_size)]
-        print(batch_size, all_batch_size)
         # ====== Create all block and batches ====== #
         # [ ((idx1, batch1), (idx2, batch2), ...), # batch 1
         #   ((idx1, batch1), (idx2, batch2), ...), # batch 2
