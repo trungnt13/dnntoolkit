@@ -2772,7 +2772,9 @@ class batch(object):
             s = sum(all_size)
             all_batch_size = [int(round(batch_size * i / s)) for i in all_size]
             if sum(all_batch_size) > batch_size: # 0.5% -> round up, too much
-                all_batch_size[0] -= 1
+                for i in xrange(len(all_batch_size)):
+                    if all_batch_size[i] > 1:
+                        all_batch_size[i] -= 1
             all_upsample = [None] * len(all_size)
         elif mode == 2 or mode == 3: # upsampling and downsampling
             maxsize = int(max(all_size)) if mode == 2 else int(min(all_size))
