@@ -2399,7 +2399,6 @@ def create_batch(n_samples, batch_size,
     For odd number of batch and block, a goal of Maximize number of n_block and
     n_batch are applied
     '''
-    print(n_samples, batch_size)
     #####################################
     # 1. Validate arguments.
     if start is None or start >= n_samples or start < 0:
