@@ -1698,6 +1698,7 @@ class trainer(object):
      - layers configuration: ['dropout':0.5, 'noise':'0.075']
      - default ArgumentsParser
      - Add iter_mode, start, end to set_strategy
+     - Add prediction task
     Value can be queried on callback:
      - idx(int): current run idx in the strategies, start from 0
      - cost: current training, testing, validating cost
@@ -1749,7 +1750,7 @@ class trainer(object):
         self._cross_data = None
         self._pcross = 0.3
 
-        self._iter_mode = 0
+        self._iter_mode = 1
 
     # ==================== Trigger Command ==================== #
     def stop(self):
@@ -1782,13 +1783,16 @@ class trainer(object):
         ONly for training, for validation and testing mode = 0
         mode : 0, 1, 2
             0 - default, sequentially read each dataset
-            1 - parallel read: equally read each dataset, upsampling
+            1 - parallel read: proportionately for each dataset (e.g. batch_size=512,
+                dataset1_size=1000, dataset2_size=500 => ds1=341, ds2=170)
+            2 - parallel read: make all dataset equal size by over-sampling
                 smaller dataset (e.g. batch_size=512, there are 5 dataset
                 => each dataset 102 samples) (only work if batch size <<
                 dataset size)
-            2 - parallel read: proportionately for each dataset (e.g. batch_size=512,
-                dataset1_size=1000, dataset2_size=500 => ds1=341, ds2=170)
-        '''
+            3 - parallel read: make all dataset equal size by under-sampling
+                smaller dataset (e.g. batch_size=512, there are 5 dataset
+                => each dataset 102 samples) (only work if batch size <<
+                dataset size)        '''
         self._iter_mode = mode
 
     def set_dataset(self, data, train=None, valid=None,
@@ -2395,6 +2399,7 @@ def create_batch(n_samples, batch_size,
     For odd number of batch and block, a goal of Maximize number of n_block and
     n_batch are applied
     '''
+    print(n_samples, batch_size)
     #####################################
     # 1. Validate arguments.
     if start is None or start >= n_samples or start < 0:
@@ -3204,7 +3209,7 @@ class visual():
     chars = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
 
     @staticmethod
-    def plot_confusion_matrix(cm, labels, axis=None):
+    def plot_confusion_matrix(cm, labels, axis=None, fontsize=13):
         from matplotlib import pyplot as plt
 
         title = 'Confusion matrix'
@@ -3226,8 +3231,8 @@ class visual():
 
         axis.set_xticks(tick_marks)
         axis.set_yticks(tick_marks)
-        axis.set_xticklabels(labels, rotation=90)
-        axis.set_yticklabels(labels)
+        axis.set_xticklabels(labels, rotation=90, fontsize=13)
+        axis.set_yticklabels(labels, fontsize=13)
 
         axis.set_ylabel('True label')
         axis.set_xlabel('Predicted label')
@@ -3818,14 +3823,6 @@ class speech():
         'qsl-pol', 'qsl-rus',
         # Caribbean, European, Latin American, Brazilian
         'spa-car', 'spa-eur', 'spa-lac', 'por-brz'])
-    nist15_within_cluster = {
-        'ara-arz': 0, 'ara-acm': 1, 'ara-apc': 2, 'ara-ary': 3, 'ara-arb': 4,
-        'zho-yue': 0, 'zho-cmn': 1, 'zho-cdo': 2, 'zho-wuu': 3,
-        'eng-gbr': 0, 'eng-usg': 1, 'eng-sas': 2,
-        'fre-waf': 0, 'fre-hat': 1,
-        'qsl-pol': 0, 'qsl-rus': 1,
-        'spa-car': 0, 'spa-eur': 1, 'spa-lac': 2, 'por-brz': 3
-    }
 
     @staticmethod
     def nist15_label(label):
@@ -3839,25 +3836,19 @@ class speech():
         within_cluster_id : int
             idx in the list of each clusters, None if not found
         '''
+        label = label.replace('spa-brz', 'por-brz')
         rval = [None, None, None]
         # lang_id
-        for i, j in enumerate(speech.nist15_lang_list):
-            if j in label:
-                rval[0] = i
-                break
+        if label not in speech.nist15_lang_list:
+            raise ValueError('Cannot found label:%s' % label)
+        rval[0] = np.argmax(label == speech.nist15_lang_list)
+
         # cluster_id
-        fixed_label = label.replace('por-brz', 'spa-brz')
-        for i, j in enumerate(speech.nist15_cluster_lang.keys()):
-            if j + '-' in fixed_label:
-                rval[1] = i
-                break
-        # special case for por cluster
-        if rval[1] is None and 'por-' in fixed_label: rval[1] = 5
-        # within_cluster_id
-        for i in speech.nist15_within_cluster.keys():
-            if i in label:
-                rval[2] = speech.nist15_within_cluster[i]
-                break
+        for c, x in enumerate(speech.nist15_cluster_lang.iteritems()):
+            j = x[1]
+            if label in j:
+                rval[1] = c
+                rval[2] = j.index(label)
         return rval
 
     # ==================== Timit ==================== #
