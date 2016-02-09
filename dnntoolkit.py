@@ -2774,7 +2774,9 @@ class batch(object):
             if sum(all_batch_size) > batch_size: # 0.5% -> round up, too much
                 for i in xrange(len(all_batch_size)):
                     if all_batch_size[i] > 1:
+                        print(i)
                         all_batch_size[i] -= 1
+                        break
             all_upsample = [None] * len(all_size)
         elif mode == 2 or mode == 3: # upsampling and downsampling
             maxsize = int(max(all_size)) if mode == 2 else int(min(all_size))
