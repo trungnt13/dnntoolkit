@@ -2885,6 +2885,7 @@ class batch(object):
         >>> X.iter(512, mode=0, shuffle=False) have the same order with
             y.iter(512, mode=0, shuffle=False)
         '''
+        print(batch_size)
         self._is_dataset_init()
         if normalizer is not None:
             self.set_normalizer(normalizer)
