@@ -2753,7 +2753,7 @@ class batch(object):
             yield self._normalizer(data[prng2.permutation(data.shape[0])])
 
     def _iter_slow(self, batch_size=128, start=None, end=None,
-        shuffle=True, seed=None, mode=0):
+                   shuffle=True, seed=None, mode=0):
         # ====== Set random seed ====== #
         all_ds = self._data[:]
         prng1 = None
@@ -2784,6 +2784,7 @@ class batch(object):
             all_batch_size = [batch_size]
             all_upsample = [None]
             all_size = [sum(all_size)]
+        print(batch_size, all_batch_size)
         # ====== Create all block and batches ====== #
         # [ ((idx1, batch1), (idx2, batch2), ...), # batch 1
         #   ((idx1, batch1), (idx2, batch2), ...), # batch 2
@@ -2885,7 +2886,6 @@ class batch(object):
         >>> X.iter(512, mode=0, shuffle=False) have the same order with
             y.iter(512, mode=0, shuffle=False)
         '''
-        print(batch_size)
         self._is_dataset_init()
         if normalizer is not None:
             self.set_normalizer(normalizer)
